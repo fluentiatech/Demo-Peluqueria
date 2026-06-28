@@ -1,0 +1,23 @@
+# Actualizaciones automáticas de dependencias (parches de seguridad incluidos).
+# Complementa al pip-audit del CI: Dependabot abre PRs cuando hay versiones nuevas
+# o CVEs; pip-audit falla el build si una dependencia tiene un CVE conocido.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly

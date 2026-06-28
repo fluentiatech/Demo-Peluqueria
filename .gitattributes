@@ -1,0 +1,7 @@
+# Normaliza a LF en el repo (la imagen se construye en Linux).
+* text=auto eol=lf
+
+# Binarios: no tocar finales de línea.
+*.png binary
+*.ico binary
+*.webmanifest text eol=lf

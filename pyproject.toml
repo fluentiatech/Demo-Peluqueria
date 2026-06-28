@@ -1,0 +1,71 @@
+[project]
+name = "agente-citas"
+version = "0.1.0"
+description = "Backend genérico de reservas por WhatsApp para cualquier negocio con cita previa."
+requires-python = ">=3.11"
+readme = "README.md"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+
+# --------------------------------------------------------------------------- #
+#  Ruff — linter + formateador
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+line-length = 95
+target-version = "py311"
+src = ["app", "tests", "scripts"]
+# Las migraciones de Alembic son autogeneradas: no se lintan a mano.
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes (imports/variables sin usar, código muerto)
+    "I",    # isort (orden de imports)
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # comprehensions
+    "SIM",  # simplificaciones
+    "S",    # flake8-bandit (escaneo de seguridad del código)
+    "RUF",  # reglas propias de ruff
+]
+ignore = [
+    "B008",     # Depends() en argumentos por defecto: patrón estándar de FastAPI
+    "RUF001",   # caracteres "ambiguos" (·, –) habituales en texto español
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: assert es el mecanismo; claves/tokens son ficticios (bandit no aplica).
+"tests/*" = ["E501", "S101", "S105", "S106"]
+"app/api/metrics.py" = ["E501"]  # template HTML/JS embebido
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests", "scripts"]
+
+# --------------------------------------------------------------------------- #
+#  mypy — comprobación de tipos
+# --------------------------------------------------------------------------- #
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+exclude = ["^\\.venv", "^build"]
+
+# --------------------------------------------------------------------------- #
+#  pytest
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"

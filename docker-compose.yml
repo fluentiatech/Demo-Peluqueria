@@ -1,0 +1,61 @@
+# Infraestructura local: Postgres (fuente de verdad) + Redis (sesiones).
+# Para desarrollo rápido puedes ignorar esto y usar SQLite (ver .env.example).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: citas
+      POSTGRES_PASSWORD: citas
+      POSTGRES_DB: citas
+    ports:
+      # Host 5433 → contenedor 5432 (evita chocar con un Postgres nativo en 5432).
+      # En producción quita esta línea: la app habla con `db:5432` por la red interna.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citas"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"   # host 6380 (evita chocar con un Redis nativo en 6379)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://citas:citas@db:5432/citas
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    # --- Endurecimiento del contenedor (defensa en profundidad) ---
+    read_only: true              # raíz inmutable: un RCE no puede dejar binarios
+    security_opt:
+      - no-new-privileges:true   # impide escalar privilegios vía setuid
+    cap_drop:
+      - ALL                      # sin capacidades del kernel (no las necesita)
+    tmpfs:
+      - /tmp                     # único punto de escritura (efímero, en memoria)
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+# NOTA de red (producción): NO publiques los puertos de `db` ni `redis` (quita sus
+# `ports:`); déjalos solo en la red interna de compose. Restringe además el egreso
+# del contenedor `app` a api.openai.com y graph.facebook.com (allowlist en el
+# firewall del host o una red con proxy de salida).
+
+volumes:
+  pgdata:

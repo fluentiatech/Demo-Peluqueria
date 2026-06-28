@@ -1,0 +1,31 @@
+# --- Core API ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# --- Base de datos (async) ---
+sqlalchemy==2.0.36
+asyncpg==0.30.0          # driver PostgreSQL (producción)
+aiosqlite==0.20.0        # driver SQLite (desarrollo local, sin Postgres)
+alembic==1.14.0          # migraciones
+
+# --- Sesión / cache ---
+redis==5.2.1
+
+# --- LLM (NLU + redacción) ---
+openai==2.38.0
+
+# --- Utilidades ---
+python-dateutil==2.9.0.post0
+httpx==0.28.1
+
+# --- Cifrado de PII en reposo (Fernet + AES-SIV) ---
+cryptography==48.0.0
+
+# --- Desarrollo / tests / calidad ---
+pytest==8.3.4
+pytest-asyncio==0.25.2
+ruff==0.15.20            # linter + formateador + escaneo de código (bandit)
+mypy==1.14.0             # comprobación de tipos
+pip-audit==2.10.1        # escaneo de vulnerabilidades de dependencias
