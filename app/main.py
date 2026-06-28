@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -191,3 +191,13 @@ async def _unhandled(_request: Request, exc: Exception) -> JSONResponse:
 @app.get("/health", tags=["meta"])
 async def health() -> dict[str, str]:
     return {"status": "ok", "version": __version__, "env": settings.app_env}
+
+
+# Política de privacidad pública (la exige Meta para publicar la app).
+@app.get("/privacidad", include_in_schema=False)
+@app.get("/privacy", include_in_schema=False)
+async def privacy_policy() -> Response:
+    page = _FRONTEND / "privacidad.html"
+    if not page.is_file():
+        return JSONResponse(status_code=404, content={"detail": "No disponible"})
+    return FileResponse(page, media_type="text/html")
