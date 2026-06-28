@@ -317,7 +317,9 @@ async def test_reschedule_flow(db_session, seed):
             {"intent": "confirm"},
         ]
     )
-    await _say(db_session, business, llm, "cambiar mi cita")
+    r1 = await _say(db_session, business, llm, "cambiar mi cita")
+    assert "profesional" in r1.lower()  # ahora pregunta el profesional al reprogramar
+    await _say(db_session, business, llm, "me da igual")  # prefiltrado, sin LLM
     await _say(db_session, business, llm, "el martes")
     await _say(db_session, business, llm, "la primera")
     r = await _say(db_session, business, llm, "sí")
@@ -325,6 +327,40 @@ async def test_reschedule_flow(db_session, seed):
 
     refreshed = await db_session.get(Appointment, appt.id)
     assert refreshed.start_at != original
+
+
+async def test_reschedule_can_change_professional(db_session, seed):
+    """Al reprogramar se puede mover la cita a otro profesional."""
+    business = await _business(db_session, seed)
+    appt = await book_appointment(
+        db_session,
+        business_id=seed.business_id,
+        service_id=seed.service_ids["Corte"],
+        start_at=datetime.combine(next_weekday(0), time(10, 0)),
+        phone=NORM,
+        name="Marta",
+        resource_id=seed.resource_ids[0],  # Sillón 1
+    )
+    await db_session.commit()
+
+    tuesday = next_weekday(1)
+    llm = FakeLLM(
+        extractions=[
+            {"intent": "reschedule"},
+            {"intent": "choose", "professional": "Sillón 2"},  # cambia de profesional
+            {"intent": "choose", "date": tuesday.isoformat()},
+            {"intent": "choose", "choice_index": 1},
+            {"intent": "confirm"},
+        ]
+    )
+    await _say(db_session, business, llm, "cambiar mi cita")
+    await _say(db_session, business, llm, "con el sillón 2")
+    await _say(db_session, business, llm, "el martes")
+    await _say(db_session, business, llm, "la primera")
+    await _say(db_session, business, llm, "sí")
+
+    refreshed = await db_session.get(Appointment, appt.id)
+    assert refreshed.resource_id == seed.resource_ids[1]  # ahora Sillón 2
 
 
 # --------------------------------------------------------------------------- #

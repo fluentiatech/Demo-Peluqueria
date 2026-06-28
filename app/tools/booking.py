@@ -330,18 +330,36 @@ async def reschedule_appointment(
     business_id: str,
     appointment_id: str,
     new_start_at: datetime,
+    new_resource_id: str | None = None,
 ) -> Appointment:
+    """Mueve la cita a una nueva hora y, opcionalmente, a otro profesional.
+
+    Si `new_resource_id` se indica y es distinto, valida que ese profesional esté
+    activo y cualificado para el servicio, y traslada la cita a él.
+    """
     new_start_at = timez.aware(new_start_at)
     appt = await session.get(Appointment, appointment_id)
     if appt is None or appt.business_id != business_id:
         raise BookingError("Cita no encontrada")
     if appt.status == AppointmentStatus.COMPLETED:
         raise BookingError("La cita no se puede reprogramar")
+    if new_start_at < timez.now():
+        raise BookingError("No se puede reprogramar al pasado")
 
     business = await session.get(Business, business_id)
     service = await session.get(Service, appt.service_id)
     if business is None or service is None:
         raise BookingError("Datos de la cita inconsistentes")
+
+    target_id = new_resource_id or appt.resource_id
+    resource = await session.get(Resource, target_id)
+    if resource is None or resource.business_id != business_id or not resource.active:
+        raise BookingError("Profesional no disponible")
+    # Al cambiar de profesional, debe poder hacer ese servicio.
+    if target_id != appt.resource_id:
+        eligible = await eligible_resource_ids(session, appt.service_id)
+        if eligible is not None and target_id not in eligible:
+            raise BookingError("Ese profesional no realiza este servicio")
 
     new_end = new_start_at + timedelta(minutes=service.duration_min)
     block_start = new_start_at - timedelta(minutes=service.buffer_before_min)
@@ -353,22 +371,20 @@ async def reschedule_appointment(
     if not biz_intervals:
         raise OutOfHoursError("El negocio está cerrado ese día")
 
-    resource = await session.get(Resource, appt.resource_id)
-    if resource is None:
-        raise BookingError("Recurso de la cita no encontrado")
     res_intervals = resource_day_intervals(biz_intervals, resource, day)
     if not _within(res_intervals, day, new_start_at, new_end):
         raise OutOfHoursError("El nuevo horario está fuera de la apertura")
 
-    await _resource_lock(session, appt.resource_id)
+    await _resource_lock(session, target_id)
     if await _has_appt_conflict(
-        session, appt.resource_id, block_start, block_end, exclude_id=appt.id
+        session, target_id, block_start, block_end, exclude_id=appt.id
     ):
         raise SlotTakenError("El nuevo hueco ya está ocupado")
-    if await _has_time_off(session, appt.resource_id, block_start, block_end):
+    if await _has_time_off(session, target_id, block_start, block_end):
         raise OutOfHoursError("El recurso no está disponible en ese horario")
 
     _emit_slot_freed(session, appt)  # el hueco antiguo queda libre → lista de espera
+    appt.resource_id = target_id
     appt.start_at = new_start_at
     appt.end_at = new_end
     appt.block_start_at = block_start

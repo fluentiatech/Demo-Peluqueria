@@ -99,6 +99,9 @@ class AppointmentOut(BaseModel):
 
 class RescheduleRequest(BaseModel):
     new_start_at: datetime
+    new_resource_id: str | None = Field(
+        None, description="Mover a otro profesional (si se omite, mantiene el actual)"
+    )
 
 
 class StatusUpdate(BaseModel):

@@ -126,6 +126,18 @@ def reschedule_ask_date(service_name: str, when: str) -> str:
     )
 
 
+def reschedule_ask_professional(
+    service_name: str, when: str, current: str | None, names: list[str]
+) -> str:
+    ahora = f" (ahora con {current})" if current else ""
+    lista = "\n".join(f"· {n}" for n in names)
+    return (
+        f"Tu cita actual es {service_name} el {when}{ahora}.\n"
+        f"¿Con qué profesional la quieres ahora?\n{lista}\n"
+        "(o dime «me da igual»)"
+    )
+
+
 def reschedule_done(service_name: str, when: str) -> str:
     return f"Cambiada: {service_name} pasa al {when}. ¡Gracias!"
 

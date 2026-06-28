@@ -606,7 +606,8 @@ async def reschedule(
 ) -> AppointmentOut:
     try:
         appt = await reschedule_appointment(
-            session, business_id, appointment_id, payload.new_start_at
+            session, business_id, appointment_id, payload.new_start_at,
+            new_resource_id=payload.new_resource_id,
         )
     except BookingError as exc:
         raise HTTPException(409, str(exc)) from exc

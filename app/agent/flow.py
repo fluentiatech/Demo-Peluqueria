@@ -31,6 +31,7 @@ from app.models import (
     ConversationState,
     Customer,
     EventLog,
+    Resource,
     Service,
 )
 from app.tools import (
@@ -373,7 +374,9 @@ async def _idle(
         )
 
     if intent in (Intent.CANCEL.value, Intent.RESCHEDULE.value):
-        return await _start_manage(session, business, convo, phone, intent)
+        return await _start_manage(
+            session, business, convo, phone, intent, professionals
+        )
 
     # question / other / choose sin contexto → Q&A libre.
     return await answer_question(session, business, text, llm)
@@ -522,8 +525,9 @@ def _norm_time(value: Any) -> str | None:
 
 async def _choose_slot(session, business, convo, ctx: dict[str, Any], chosen: dict) -> str:
     """Fija el hueco elegido y pasa a confirmar (o pide el nombre si es nuevo)."""
-    # "Me da igual": no fijamos recurso; lo elige el balanceo al reservar.
-    if ctx.get("any_pro"):
+    # "Me da igual" en una RESERVA nueva: no fijamos recurso, lo elige el balanceo.
+    # Al REPROGRAMAR sí respetamos el recurso del hueco elegido (cambio de profesional).
+    if ctx.get("any_pro") and ctx.get("mode") != "reschedule":
         chosen["resource_id"] = None
     ctx = {**ctx, "chosen": chosen}
     ctx.pop("offered", None)
@@ -593,7 +597,7 @@ def _collecting_contact(convo, ext, ctx) -> str:
     return replies.confirm_booking(ctx["service_name"], ctx["chosen"]["label"])
 
 
-async def _start_manage(session, business, convo, phone, intent) -> str:
+async def _start_manage(session, business, convo, phone, intent, professionals) -> str:
     appts = await _upcoming_appointments(session, business.id, phone)
     if not appts:
         _set(convo, S.IDLE, {})
@@ -608,16 +612,19 @@ async def _start_manage(session, business, convo, phone, intent) -> str:
         _set(convo, S.CONFIRMING, ctx)
         return replies.confirm_cancel(name, when)
 
-    # Reprogramar: pedimos nueva fecha, restringida al mismo recurso.
+    # Reprogramar: como una reserva del mismo servicio. Se puede mantener o
+    # cambiar el profesional (o "me da igual") y luego elegir nueva hora.
+    cur = await session.get(Resource, appt.resource_id)
     ctx = {
         "mode": "reschedule",
         "appt_id": appt.id,
         "service_id": appt.service_id,
         "service_name": name,
-        "resource_id": appt.resource_id,
     }
-    _set(convo, S.COLLECTING_DATETIME, ctx)
-    return replies.reschedule_ask_date(name, when)
+    _set(convo, S.COLLECTING_PROFESSIONAL, ctx)
+    return replies.reschedule_ask_professional(
+        name, when, cur.name if cur else None, [p.name for p in professionals]
+    )
 
 
 async def _waitlist_offer(session, business, convo, phone, intent, ctx) -> str:
@@ -680,6 +687,7 @@ async def _confirming(session, business, convo, phone, intent, ctx, message_id) 
             await reschedule_appointment(
                 session, business.id, ctx["appt_id"],
                 datetime.fromisoformat(chosen["start_at"]),
+                new_resource_id=chosen.get("resource_id"),
             )
             _set(convo, S.IDLE, {})
             return replies.reschedule_done(ctx["service_name"], chosen["label"])
@@ -692,7 +700,7 @@ async def _confirming(session, business, convo, phone, intent, ctx, message_id) 
     except SlotTakenError:
         # El hueco se ocupó entre la oferta y la confirmación: re-ofertamos.
         keep = ("mode", "service_id", "service_name", "resource_id",
-                "any_pro", "professional_name")
+                "any_pro", "professional_name", "appt_id")
         retry = {k: ctx[k] for k in keep if k in ctx}
         _set(convo, S.COLLECTING_DATETIME, retry)
         return replies.slot_taken()
