@@ -93,7 +93,7 @@ class OpenAIClient:
             model=used_model,
             messages=full_messages,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
         )
         usage = resp.usage
         cached = 0
@@ -118,7 +118,7 @@ class OpenAIClient:
                 {"role": "user", "content": user},
             ],
             temperature=0,
-            max_tokens=300,
+            max_completion_tokens=300,
             response_format={"type": "json_object"},
         )
         try:
