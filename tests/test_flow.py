@@ -137,6 +137,35 @@ async def test_greeting_neutral_for_unknown_number(db_session, seed):
     assert "Soy " not in r  # el seed no tiene assistant_name configurado
 
 
+async def test_customer_can_propose_time_outside_offered_list(db_session, seed):
+    """El cliente puede pedir una hora que no está en la lista y se le da si existe."""
+    from app import timez
+
+    business = await _business(db_session, seed)
+    monday = next_weekday(0)
+    llm = FakeLLM(extractions=[
+        {"intent": "book", "service": "Corte", "professional": "any"},
+        {"intent": "choose", "date": monday.isoformat()},  # ofrece 9:00..10:15
+        {"intent": "choose", "time": "13:00"},             # hora fuera de la lista
+        {"intent": "provide_name", "name": "Ana"},
+        {"intent": "confirm"},
+    ])
+    await _say(db_session, business, llm, "quiero corte")
+    r2 = await _say(db_session, business, llm, "el lunes")
+    assert "huecos" in r2.lower()
+    r3 = await _say(db_session, business, llm, "mejor a las 13:00")
+    assert "nombre" in r3.lower()  # encontró las 13:00 → pide nombre (cliente nuevo)
+    await _say(db_session, business, llm, "Ana")
+    r5 = await _say(db_session, business, llm, "sí")
+    assert "listo" in r5.lower()
+
+    appt = await db_session.scalar(
+        select(Appointment).where(Appointment.business_id == seed.business_id)
+    )
+    assert appt is not None
+    assert timez.to_local(appt.start_at).hour == 13  # se reservó a las 13:00
+
+
 async def test_greeting_introduces_named_assistant(db_session, seed):
     """Si el negocio nombra a su asistente, este se presenta al saludar."""
     business = await _business(db_session, seed)

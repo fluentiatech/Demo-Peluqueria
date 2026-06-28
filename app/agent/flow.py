@@ -494,12 +494,34 @@ async def _collecting_datetime(session, business, convo, ext, intent, ctx) -> st
         _set(convo, S.COLLECTING_DATETIME, ctx)
         return replies.offer_slots([o["label"] for o in ctx["offered"]])
 
-    # Sub-paso 2: ya hay huecos ofertados → esperamos una elección.
+    # Sub-paso 2: hay huecos ofertados → elige uno, o propone fecha/hora nuevas.
     chosen = _pick_slot(ctx["offered"], ext.data.get("choice_index"), ext.data.get("time"))
     if chosen is None:
+        # El cliente puede sugerir otra hora/día en vez de elegir de la lista.
+        if _resolve_date(ext) is not None or ext.data.get("time"):
+            return await _propose_new(session, business, convo, ext, ctx)
         return replies.ask_choice_again()
+    return await _choose_slot(session, business, convo, ctx, dict(chosen))
 
-    chosen = dict(chosen)
+
+def _norm_time(value: Any) -> str | None:
+    """Normaliza una hora a 'HH:MM' ('10' → '10:00', '9:5' → '09:05')."""
+    if not value:
+        return None
+    s = str(value).strip()
+    try:
+        if ":" in s:
+            h, m = s.split(":")[:2]
+            return f"{int(h):02d}:{int(m):02d}"
+        if s.isdigit():
+            return f"{int(s):02d}:00"
+    except ValueError:
+        return None
+    return None
+
+
+async def _choose_slot(session, business, convo, ctx: dict[str, Any], chosen: dict) -> str:
+    """Fija el hueco elegido y pasa a confirmar (o pide el nombre si es nuevo)."""
     # "Me da igual": no fijamos recurso; lo elige el balanceo al reservar.
     if ctx.get("any_pro"):
         chosen["resource_id"] = None
@@ -511,21 +533,55 @@ async def _collecting_datetime(session, business, convo, ext, intent, ctx) -> st
         _set(convo, S.CONFIRMING, ctx)
         return replies.confirm_booking(ctx["service_name"], chosen["label"])
 
-    # Reserva nueva: si ya conocemos el nombre, saltamos a confirmar.
-    customer = await session.scalar(
-        select(Customer).where(
-            Customer.business_id == business.id,
-            Customer.phone == convo.customer_phone,
-        )
-    )
-    if customer is not None and customer.name:
-        ctx["name"] = customer.name
-        ctx["action"] = "book"
+    name = await _customer_name(session, business.id, convo.customer_phone)
+    if name:
+        ctx = {**ctx, "name": name, "action": "book"}
         _set(convo, S.CONFIRMING, ctx)
         return replies.confirm_booking(ctx["service_name"], chosen["label"])
-
     _set(convo, S.COLLECTING_CONTACT, ctx)
     return replies.ask_name()
+
+
+async def _propose_new(session, business, convo, ext, ctx: dict[str, Any]) -> str:
+    """El cliente propone una fecha u hora distintas: re-buscamos disponibilidad."""
+    day = _resolve_date(ext)
+    if day is None and ctx.get("offered"):
+        day = datetime.fromisoformat(ctx["offered"][0]["start_at"]).date()
+    if day is None:
+        return replies.ask_choice_again()
+
+    want = _norm_time(ext.data.get("time"))
+    # Si pide una hora concreta, miramos TODO el día (no solo los primeros huecos).
+    limit = 80 if want else MAX_OFFER
+    slots = await check_availability(
+        session, business.id, ctx["service_id"], day, day,
+        resource_id=ctx.get("resource_id"), limit=limit,
+    )
+    if not slots:
+        wctx = {
+            "service_id": ctx["service_id"],
+            "service_name": ctx["service_name"],
+            "resource_id": ctx.get("resource_id"),
+            "any_pro": ctx.get("any_pro", False),
+            "desired_date": day.isoformat(),
+        }
+        _set(convo, S.WAITLIST_OFFER, wctx)
+        return replies.ask_waitlist(ctx["service_name"])
+
+    offered = _offered_from_slots(slots)
+    if want:
+        match = next(
+            (o for o in offered
+             if datetime.fromisoformat(o["start_at"]).strftime("%H:%M") == want),
+            None,
+        )
+        if match is not None:
+            return await _choose_slot(session, business, convo, ctx, dict(match))
+        # La hora pedida no está libre → mostramos las que sí lo están.
+    offered = offered[:MAX_OFFER]
+    ctx = {**ctx, "offered": offered}
+    _set(convo, S.COLLECTING_DATETIME, ctx)
+    return replies.offer_slots([o["label"] for o in offered])
 
 
 def _collecting_contact(convo, ext, ctx) -> str:
