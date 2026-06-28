@@ -24,7 +24,9 @@
     if (!svcs.length) { body.innerHTML = '<div class="card"><div class="empty">Aún no hay servicios.</div></div>'; return; }
     body.innerHTML =
       '<div class="card"><table><thead><tr><th>Servicio</th><th>Categoría</th>' +
-      '<th class="r">Duración</th><th class="r">Precio</th><th>Estado</th><th></th></tr></thead><tbody>' +
+      '<th class="r">Duración</th><th class="r">Precio</th>' +
+      '<th class="r" title="Minutos de limpieza/preparación tras la cita">Limpieza</th>' +
+      '<th>Estado</th><th></th></tr></thead><tbody>' +
       svcs.map(row).join("") + "</tbody></table></div>";
     wire();
   }
@@ -36,6 +38,7 @@
         `<td><input class="inline" id="e-cat" value="${Panel.esc(s.category || "")}"></td>` +
         `<td class="r"><input class="inline w-num" id="e-dur" type="number" min="1" value="${s.duration_min}"></td>` +
         `<td class="r"><input class="inline w-num" id="e-price" type="number" min="0" step="0.01" value="${s.price}"></td>` +
+        `<td class="r"><input class="inline w-num" id="e-buf" type="number" min="0" step="5" value="${s.buffer_after_min}"></td>` +
         `<td>${estado(s)}</td>` +
         `<td class="r"><button class="btn sm primary" data-save="${s.id}">Guardar</button> <button class="btn ghost sm" data-cancel="1">Cancelar</button></td></tr>`;
     }
@@ -43,6 +46,7 @@
       `<td class="muted">${Panel.esc(canonCategory(s.category))}</td>` +
       `<td class="r num">${s.duration_min} min</td>` +
       `<td class="r num">${Panel.money(s.price)}</td>` +
+      `<td class="r num">${s.buffer_after_min ? s.buffer_after_min + " min" : "—"}</td>` +
       `<td>${estado(s)}</td>` +
       `<td class="r"><button class="btn ghost sm" data-ed="${s.id}">Editar</button>` +
       (s.active
@@ -70,8 +74,12 @@
       category: document.getElementById("e-cat").value.trim() || null,
       duration_min: Number(document.getElementById("e-dur").value),
       price: document.getElementById("e-price").value,
+      buffer_after_min: Number(document.getElementById("e-buf").value) || 0,
     };
-    const prev = { name: s.name, category: s.category, duration_min: s.duration_min, price: s.price };
+    const prev = {
+      name: s.name, category: s.category, duration_min: s.duration_min,
+      price: s.price, buffer_after_min: s.buffer_after_min,
+    };
     try {
       const updated = await Panel.api(`/admin/businesses/${biz}/services/${id}`,
         { method: "PATCH", body: JSON.stringify(patch) });
@@ -151,6 +159,10 @@
         `<div class="chips-pick">${durChips}</div>` +
         '<input type="number" id="m-dur" min="5" step="5" value="30"></div>' +
         f2("Precio (€)", '<input type="number" id="m-price" min="0" step="0.5" value="0" inputmode="decimal">') +
+        '<div class="two">' +
+        f2("Preparación antes (min)", '<input type="number" id="m-buf-before" min="0" step="5" value="0">') +
+        f2("Limpieza después (min)", '<input type="number" id="m-buf-after" min="0" step="5" value="0">') +
+        "</div>" +
         '<div id="m-err" class="err" style="display:none"></div>',
       onSubmit: async (m, close) => {
         const v = (id) => m.querySelector("#" + id).value.trim();
@@ -163,6 +175,8 @@
           category: category || null,
           duration_min: Number(v("m-dur")),
           price: v("m-price") || "0",
+          buffer_before_min: Number(v("m-buf-before")) || 0,
+          buffer_after_min: Number(v("m-buf-after")) || 0,
         };
         if (!body.name) return fail("El nombre es obligatorio.");
         if (!(body.duration_min > 0)) return fail("La duración debe ser mayor que 0.");
