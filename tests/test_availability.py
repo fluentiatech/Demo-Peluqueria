@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
 from app.tools import book_appointment, check_availability
 from tests.conftest import next_weekday
+
+_MADRID = ZoneInfo("Europe/Madrid")
 
 
 async def test_slots_within_opening_hours(db_session, seed):
@@ -23,12 +26,12 @@ async def test_slots_within_opening_hours(db_session, seed):
         assert time(9, 0) <= s.start_at.time()
         # Un corte de 30 min: el último inicio válido es 13:30.
         assert s.end_at.time() <= time(14, 0)
-    assert slots[0].start_at == datetime.combine(day, time(9, 0))
+    assert slots[0].start_at == datetime.combine(day, time(9, 0), tzinfo=_MADRID)
 
 
 async def test_booked_slot_is_excluded(db_session, seed):
     day = next_weekday(1)
-    start = datetime.combine(day, time(9, 0))
+    start = datetime.combine(day, time(9, 0), tzinfo=_MADRID)
     await book_appointment(
         db_session,
         business_id=seed.business_id,

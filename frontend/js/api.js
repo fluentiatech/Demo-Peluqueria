@@ -30,10 +30,12 @@ const Panel = (() => {
   const money = (v) =>
     new Intl.NumberFormat("es-ES", { style: "currency", currency: cur() }).format(Number(v || 0));
   const num = (v) => new Intl.NumberFormat("es-ES").format(Number(v || 0));
+  // Siempre en hora de España, sea cual sea la zona del navegador.
+  const TZ = "Europe/Madrid";
   const time = (iso) =>
-    new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    new Date(iso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
   const date = (iso) =>
-    iso ? new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—";
+    iso ? new Date(iso).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: TZ }) : "—";
   const todayISO = () => {
     const d = new Date();
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);

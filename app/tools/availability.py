@@ -17,6 +17,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import timez
 from app.models import (
     Appointment,
     AppointmentStatus,
@@ -46,7 +47,7 @@ _BLOCKING_STATUSES = (
 def _fits(intervals: list[TimeInterval], day: date, start: datetime, end: datetime) -> bool:
     """¿Cabe [start, end] dentro de alguno de los tramos abiertos del día?"""
     for i0, i1 in intervals:
-        if datetime.combine(day, i0) <= start and end <= datetime.combine(day, i1):
+        if timez.local(day, i0) <= start and end <= timez.local(day, i1):
             return True
     return False
 
@@ -87,8 +88,8 @@ async def check_availability(
     if not resources:
         return []
 
-    range_start = datetime.combine(date_from, time.min)
-    range_end = datetime.combine(date_to + timedelta(days=1), time.min)
+    range_start = timez.local(date_from, time.min)
+    range_end = timez.local(date_to + timedelta(days=1), time.min)
 
     # Citas existentes en el rango → ventanas de bloqueo por recurso.
     appts = (
@@ -101,9 +102,13 @@ async def check_availability(
             )
         )
     ).all()
+    # Normalizamos a hora local consciente de zona: la BD puede devolver naive
+    # (SQLite) o aware en UTC (Postgres); así las comparaciones nunca mezclan.
     busy: dict[str, list[tuple[datetime, datetime]]] = {}
     for a in appts:
-        busy.setdefault(a.resource_id, []).append((a.block_start_at, a.block_end_at))
+        busy.setdefault(a.resource_id, []).append(
+            (timez.to_local(a.block_start_at), timez.to_local(a.block_end_at))
+        )
 
     # Ausencias en el rango por recurso.
     offs = (
@@ -116,10 +121,12 @@ async def check_availability(
         )
     ).all()
     for o in offs:
-        busy.setdefault(o.resource_id, []).append((o.start_at, o.end_at))
+        busy.setdefault(o.resource_id, []).append(
+            (timez.to_local(o.start_at), timez.to_local(o.end_at))
+        )
 
     closures = await closures_by_date(session, business_id, date_from, date_to)
-    now = datetime.now()
+    now = timez.now()
     slots: list[Slot] = []
 
     day = date_from
@@ -131,8 +138,8 @@ async def check_availability(
                 for res in resources
             }
             for ini, fin in biz_intervals:
-                cursor = datetime.combine(day, ini)
-                interval_end = datetime.combine(day, fin)
+                cursor = timez.local(day, ini)
+                interval_end = timez.local(day, fin)
                 while cursor + duration <= interval_end:
                     svc_end = cursor + duration
                     if cursor >= now:

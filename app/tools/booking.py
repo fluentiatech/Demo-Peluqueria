@@ -19,6 +19,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import timez
 from app.config import settings
 from app.models import (
     Appointment,
@@ -143,7 +144,7 @@ async def _day_appointment_counts(
     session: AsyncSession, business_id: str, day: date
 ) -> dict[str, int]:
     """Citas activas por recurso en un día (para el reparto de carga)."""
-    start = datetime.combine(day, time.min)
+    start = timez.local(day, time.min)
     end = start + timedelta(days=1)
     rows = (
         await session.execute(
@@ -194,6 +195,10 @@ async def book_appointment(
     chat). `force=True` (alta manual del back-office) **salta** la validación de
     horario/cierre/ausencia, pero NUNCA el anti-doble-reserva.
     """
+    # Toda hora de cita se maneja en la zona del negocio (España). Si llega sin
+    # zona (naive), la interpretamos como hora local; así "las 9" son las 9 aquí.
+    start_at = timez.aware(start_at)
+
     # 1) Idempotencia: si ya procesamos este mensaje, devolvemos la cita creada.
     if idempotency_key:
         existing = await session.scalar(
@@ -215,7 +220,7 @@ async def book_appointment(
     if not service.active:
         raise BookingError("El servicio no está disponible")
 
-    if start_at < datetime.now(tz=start_at.tzinfo):
+    if start_at < timez.now():
         raise BookingError("No se puede reservar en el pasado")
 
     end_at = start_at + timedelta(minutes=service.duration_min)
@@ -302,7 +307,7 @@ async def book_appointment(
 def _within(intervals, day, start: datetime, end: datetime) -> bool:
     """¿Cabe [start, end] en algún tramo abierto del día?"""
     for i0, i1 in intervals:
-        if datetime.combine(day, i0) <= start and end <= datetime.combine(day, i1):
+        if timez.local(day, i0) <= start and end <= timez.local(day, i1):
             return True
     return False
 
@@ -326,6 +331,7 @@ async def reschedule_appointment(
     appointment_id: str,
     new_start_at: datetime,
 ) -> Appointment:
+    new_start_at = timez.aware(new_start_at)
     appt = await session.get(Appointment, appointment_id)
     if appt is None or appt.business_id != business_id:
         raise BookingError("Cita no encontrada")

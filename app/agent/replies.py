@@ -7,10 +7,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app import timez
+
 _DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 
 def fmt_slot(dt: datetime) -> str:
+    # Siempre en hora de España (los datetime de BD vuelven en UTC).
+    dt = timez.to_local(dt)
     return f"{_DAYS[dt.weekday()]} {dt.day:02d}/{dt.month:02d} a las {dt:%H:%M}"
 
 

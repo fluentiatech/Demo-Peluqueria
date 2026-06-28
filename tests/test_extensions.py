@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, time
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -15,9 +16,12 @@ from app.tools import (
 )
 from tests.conftest import next_weekday
 
+_MADRID = ZoneInfo("Europe/Madrid")
+
 
 def _at(day, hour, minute=0) -> datetime:
-    return datetime.combine(day, time(hour, minute))
+    # Hora local del negocio (España), como en producción.
+    return datetime.combine(day, time(hour, minute), tzinfo=_MADRID)
 
 
 # --------------------------------------------------------------------------- #

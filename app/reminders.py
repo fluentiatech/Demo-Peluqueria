@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import timez
 from app.agent.replies import fmt_slot
 from app.config import settings
 from app.integrations.whatsapp import send_template
@@ -38,7 +39,7 @@ async def send_due_reminders(
 ) -> int:
     """Envía los recordatorios pendientes. Devuelve cuántos se enviaron."""
     send = send or send_template
-    now = now or datetime.now()
+    now = now or timez.now()
     horizon = now + timedelta(hours=settings.reminder_hours_before)
 
     appts = (

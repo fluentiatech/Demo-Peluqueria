@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # --- Entorno ---
     app_env: str = "development"
     log_level: str = "INFO"
+    # Zona horaria del negocio: TODAS las horas de cita/disponibilidad se manejan
+    # en esta zona (consciente de DST), para que "las 9" sea siempre las 9 en España.
+    timezone: str = "Europe/Madrid"
     sql_echo: bool = False  # vuelca el SQL generado por SQLAlchemy (debug)
 
     # --- Seguridad ---

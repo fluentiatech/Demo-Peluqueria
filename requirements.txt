@@ -23,6 +23,9 @@ httpx==0.28.1
 # --- Cifrado de PII en reposo (Fernet + AES-SIV) ---
 cryptography==48.0.0
 
+# --- Zona horaria (IANA) disponible aunque la imagen no traiga tzdata del SO ---
+tzdata==2026.2
+
 # --- Desarrollo / tests / calidad ---
 pytest==9.0.3
 pytest-asyncio==1.4.0

@@ -7,12 +7,13 @@ ingreso "perdido".
 """
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import timez
 from app.models import Appointment, AppointmentStatus, Customer, Resource
 from app.schemas.reports import (
     AgendaItem,
@@ -59,7 +60,7 @@ def _appt_join(business_id: str):
 
 
 async def agenda(session: AsyncSession, business_id: str, day: date) -> AgendaOut:
-    start = datetime.combine(day, time.min)
+    start = timez.local(day, time.min)
     end = start + timedelta(days=1)
     rows = (
         await session.execute(
@@ -159,8 +160,8 @@ async def customer_detail(
 async def billing(
     session: AsyncSession, business_id: str, date_from: date, date_to: date
 ) -> BillingOut:
-    start = datetime.combine(date_from, time.min)
-    end = datetime.combine(date_to + timedelta(days=1), time.min)
+    start = timez.local(date_from, time.min)
+    end = timez.local(date_to + timedelta(days=1), time.min)
     base = [
         Appointment.business_id == business_id,
         Appointment.start_at >= start,
@@ -175,7 +176,7 @@ async def billing(
         return Decimal(total or 0)
 
     billed = await _sum(*base, *done)
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = timez.now()
     expected = await _sum(
         *base,
         Appointment.status.in_((_St.PENDING, _St.CONFIRMED)),

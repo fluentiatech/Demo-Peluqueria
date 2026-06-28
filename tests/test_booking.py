@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -15,9 +16,12 @@ from app.tools import (
 )
 from tests.conftest import next_weekday
 
+_MADRID = ZoneInfo("Europe/Madrid")
+
 
 def _future_start(weekday: int = 0, hour: int = 10) -> datetime:
-    return datetime.combine(next_weekday(weekday), time(hour, 0))
+    # Hora local del negocio (España), como en producción.
+    return datetime.combine(next_weekday(weekday), time(hour, 0), tzinfo=_MADRID)
 
 
 async def test_book_creates_pending_with_correct_end(db_session, seed):

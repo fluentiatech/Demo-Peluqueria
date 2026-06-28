@@ -15,6 +15,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import timez
 from app.agent import replies
 from app.agent.context import ResourceRef, ServiceRef, get_business_context
 from app.agent.llm import Extraction, LLMClient
@@ -199,7 +200,7 @@ async def _upcoming_appointments(
             Appointment.status.in_(
                 (AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED)
             ),
-            Appointment.start_at >= datetime.now(),
+            Appointment.start_at >= timez.now(),
         )
         .order_by(Appointment.start_at)
     )
