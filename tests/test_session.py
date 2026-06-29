@@ -48,6 +48,29 @@ async def test_mutation_requires_csrf_with_cookie(client, admin_key):
     assert ok.status_code == 201
 
 
+async def test_session_info_recovers_csrf_after_reload(client, admin_key):
+    """Tras recargar la página, el panel recupera el CSRF de la cookie y escribe."""
+    login_csrf = (await client.post("/admin/session", json={"api_key": KEY})).json()["csrf"]
+
+    # Simula una recarga: solo queda la cookie, el CSRF en memoria se perdió.
+    info = await client.get("/admin/session")
+    assert info.status_code == 200
+    recovered = info.json()["csrf"]
+    assert recovered == login_csrf
+
+    # El CSRF recuperado vale para una escritura (no da 403).
+    ok = await client.post(
+        "/admin/businesses", json={"name": "Tras recarga"},
+        headers={"X-CSRF-Token": recovered},
+    )
+    assert ok.status_code == 201
+
+
+async def test_session_info_without_cookie_is_401(client, admin_key):
+    client.cookies.clear()
+    assert (await client.get("/admin/session")).status_code == 401
+
+
 async def test_lockout_after_repeated_failures(client, admin_key, monkeypatch):
     monkeypatch.setattr(settings, "login_max_attempts", 3)
     for _ in range(3):

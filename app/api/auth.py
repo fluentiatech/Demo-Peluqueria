@@ -53,6 +53,22 @@ async def login(payload: LoginIn, request: Request, response: Response) -> Login
     return LoginOut(csrf=csrf, ttl_min=settings.session_ttl_min)
 
 
+@router.get("/session", response_model=LoginOut)
+async def session_info(request: Request) -> LoginOut:
+    """Devuelve el token CSRF de la sesión vigente (cookie ya válida).
+
+    El panel lo llama al cargar cada página para recuperar el CSRF sin tener
+    que volver a iniciar sesión; las navegaciones entre páginas son recargas
+    completas y el token solo vive en memoria.
+    """
+    from app.sessions import read_session
+
+    session = read_session(request.cookies.get(COOKIE_NAME))
+    if session is None:
+        raise HTTPException(401, "Sin sesión")
+    return LoginOut(csrf=session.get("csrf", ""), ttl_min=settings.session_ttl_min)
+
+
 @router.delete("/session", status_code=204)
 async def logout(response: Response) -> None:
     response.delete_cookie(COOKIE_NAME, path="/")

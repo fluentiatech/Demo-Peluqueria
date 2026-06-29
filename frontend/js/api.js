@@ -173,6 +173,14 @@ const Panel = (() => {
     // muestra la pantalla de clave automáticamente.
     try { businesses = await api("/admin/businesses"); }
     catch (e) { if (e.message !== "401") gate(e.message); return; }
+    // La sesión es válida pero el CSRF solo vive en memoria: al recargar/navegar
+    // se pierde. Lo recuperamos de la cookie para que las escrituras no den 403.
+    if (!csrf) {
+      try {
+        const r = await fetch("/admin/session", { credentials: "same-origin" });
+        if (r.ok) csrf = (await r.json()).csrf;
+      } catch (e) { /* en local/red de confianza no hay sesión; no hace falta */ }
+    }
     if (!businesses.length) {
       content().innerHTML = '<div class="empty">No hay negocios dados de alta todavía.</div>';
       return;
