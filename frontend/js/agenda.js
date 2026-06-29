@@ -43,13 +43,14 @@
 
   function seg(it) {
     // "Asistió"/"No vino" solo cuando ya ha pasado la hora de inicio de la cita.
-    const started = new Date(it.start_at) <= new Date();
+    const t = it.start_at ? new Date(it.start_at).getTime() : 0;
+    const started = !t || isNaN(t) || t <= Date.now();
     return '<div class="seg" data-id="' + it.id + '">' +
       Panel.STATUS_ORDER.map((s) => {
         const locked = !started && (s === "completed" || s === "no_show");
         const cls = (it.status === s ? "on" : "") + (locked ? " locked" : "");
-        const t = locked ? ' title="Disponible cuando empiece la cita"' : "";
-        return `<button data-st="${s}" class="${cls}"${locked ? " disabled" : ""}${t}>${Panel.STATUS[s]}</button>`;
+        const ttl = locked ? ` title="Podrás marcar la asistencia a partir de las ${Panel.time(it.start_at)}"` : "";
+        return `<button data-st="${s}" class="${cls}"${locked ? " disabled" : ""}${ttl}>${Panel.STATUS[s]}</button>`;
       }).join("") + "</div>";
   }
 
@@ -91,6 +92,24 @@
     const it = data.items.find((i) => i.id === id);
     if (!it || it.status === segBtn.dataset.st) return;
     const prev = it.status, next = segBtn.dataset.st;
+
+    // Si la asistencia YA estaba marcada (Asistió/No vino), cambiarla pide
+    // confirmación explícita en un popup; el primer marcado es directo.
+    if (prev === "completed" || prev === "no_show") {
+      Panel.modal({
+        title: "Cambiar asistencia",
+        submitLabel: "Sí, cambiar",
+        html: `<p class="confirm-txt">Esta cita está marcada como <b>${Panel.STATUS[prev]}</b>.<br><br>` +
+              `¿Seguro que quieres cambiarla a <b>${Panel.STATUS[next]}</b>?</p>`,
+        onSubmit: async (m, close) => {
+          await setStatus(it, next);
+          close();
+          Panel.flash(`Cambiada a ${Panel.STATUS[next]}`);
+        },
+      });
+      return;
+    }
+
     await setStatus(it, next);
     Panel.undo(`${it.customer_name || "Cliente"}: ${Panel.STATUS[next]}`, () => setStatus(it, prev));
   }

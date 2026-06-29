@@ -131,6 +131,7 @@ td.r, th.r { text-align: right; }
 .modal .field2 { display: grid; gap: 5px; }
 .modal .field2 label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .modal .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal .confirm-txt { margin: 4px 0 2px; font-size: 14px; line-height: 1.5; color: var(--ink); }
 .modal .foot { display: flex; gap: 10px; padding: 16px 22px 20px; }
 .modal .foot .btn { flex: 1; }
 

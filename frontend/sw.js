@@ -1,7 +1,7 @@
 /* Service worker mínimo: habilita la instalación como app y un arranque rápido.
    Cachea el armazón estático; los datos (API) siempre van a la red. */
 "use strict";
-const CACHE = "recepcion-v2";
+const CACHE = "recepcion-v3";
 const SHELL = [
   "/panel/", "/panel/index.html", "/panel/agenda.html", "/panel/espera.html",
   "/panel/calendario.html", "/panel/clientes.html", "/panel/servicios.html",

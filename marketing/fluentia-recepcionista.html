@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fluentIA · Recepcionista virtual por WhatsApp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060c1a;
+    --navy:#1a2b5f; --navy-dark:#0e1a3d;
+    --pink:#d4145a; --pink-light:#f01870;
+    --blue:#3b82f6;
+    --text:rgba(255,255,255,.92);
+    --muted:rgba(255,255,255,.56);
+    --border:rgba(255,255,255,.10);
+    --glass:rgba(255,255,255,.035);
+    --pink-glow:rgba(212,20,90,.30);
+    --display:"Syne", ui-sans-serif, system-ui, sans-serif;
+    --body:"Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:var(--body); color:var(--text); background:#02060f; -webkit-font-smoothing:antialiased; line-height:1.55;}
+  h1,h2,h3{font-family:var(--display); letter-spacing:-0.02em; margin:0; font-weight:800;}
+  p{margin:0 0 12px;}
+  .muted{color:var(--muted);}
+  .pink{color:var(--pink);}
+  b{color:#fff; font-weight:600;}
+
+  @page{ size:A4; margin:0; }
+  .page{
+    width:210mm; min-height:297mm; padding:20mm 18mm; margin:0 auto; position:relative; overflow:hidden;
+    page-break-after:always; color:var(--text);
+    background:
+      radial-gradient(820px 460px at 88% -8%, rgba(212,20,90,.20), transparent 62%),
+      radial-gradient(680px 460px at -12% 112%, rgba(59,130,246,.16), transparent 60%),
+      var(--bg);
+  }
+  .page::before{ /* trama de puntos sutil */
+    content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:radial-gradient(rgba(255,255,255,.05) 1px, transparent 1px);
+    background-size:22px 22px;
+  }
+  .page:last-child{ page-break-after:auto; }
+  .page > *{ position:relative; z-index:1; }
+  /* "La navaja": el icono de fluentIA en grande y tenue de fondo (como el folleto) */
+  .bg-logo{ position:absolute; inset:0; z-index:0; pointer-events:none;
+    background:url("navaja.png") center/900px no-repeat; opacity:.028;
+    filter:brightness(0) invert(1); }
+  .cover-page .bg-logo{ background-size:1050px; opacity:.04; }
+
+  .brandbar{ display:flex; align-items:center; gap:10px; }
+  .logo{ height:30px; }
+  .foot{ position:absolute; left:18mm; right:18mm; bottom:12mm; display:flex; justify-content:space-between;
+    font-size:10px; color:var(--muted); border-top:1px solid var(--border); padding-top:8px; z-index:1; }
+
+  /* Portada */
+  .cover{ display:flex; flex-direction:column; height:257mm; }
+  .cover-top{ display:flex; justify-content:center; padding-top:8mm; }
+  .cover-logo{ height:135px; width:auto; filter:drop-shadow(0 0 34px rgba(212,20,90,.40)); }
+  .cover .mid{ flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .eyebrow{ display:inline-flex; align-items:center; gap:8px; font-size:11.5px; font-weight:600; color:#fff;
+    background:rgba(212,20,90,.16); border:1px solid rgba(212,20,90,.40); padding:7px 14px; border-radius:999px; letter-spacing:.03em;
+    box-shadow:0 0 18px var(--pink-glow); }
+  .dot{ width:7px; height:7px; border-radius:50%; background:var(--pink); box-shadow:0 0 8px var(--pink); }
+  .cover h1{ font-size:48px; line-height:1.04; margin:20px 0 16px; max-width:16ch;
+    background:linear-gradient(120deg,#ffffff 30%, #ffd2e2 60%, #ff6ba8 100%); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .cover .lead{ font-size:16.5px; color:var(--muted); max-width:56ch; }
+  .chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:28px; }
+  .chip{ font-size:12.5px; font-weight:500; color:#fff; border:1px solid var(--border); background:var(--glass);
+    border-radius:999px; padding:8px 14px; }
+  .chip.k{ border-color:rgba(212,20,90,.45); box-shadow:0 0 14px rgba(212,20,90,.18); }
+
+  .kicker{ font-size:11.5px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.14em; }
+  h2.title{ font-size:29px; margin:8px 0 16px; color:#fff; }
+  .sub{ font-size:14.5px; color:var(--muted); max-width:62ch; margin-bottom:22px; }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:13px; }
+  .card{ border:1px solid var(--border); border-radius:16px; padding:17px 18px; background:var(--glass); }
+  .card.glow{ border-color:rgba(212,20,90,.35); box-shadow:0 0 26px rgba(212,20,90,.12) inset, 0 0 0 1px rgba(212,20,90,.05); }
+  .card h3{ font-size:15.5px; margin-bottom:6px; color:#fff; }
+  .card p{ font-size:12.5px; color:var(--muted); margin:0; }
+  .icon{ width:34px; height:34px; border-radius:10px; background:rgba(212,20,90,.14); border:1px solid rgba(212,20,90,.35);
+    display:flex; align-items:center; justify-content:center; margin-bottom:12px; box-shadow:0 0 14px rgba(212,20,90,.18); }
+  .icon svg{ width:18px; height:18px; stroke:var(--pink-light); fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+  ul.checks{ list-style:none; margin:0; padding:0; }
+  ul.checks li{ position:relative; padding-left:27px; margin-bottom:9px; font-size:13px; color:var(--muted); }
+  ul.checks li b{ color:#fff; }
+  ul.checks li::before{ content:""; position:absolute; left:0; top:2px; width:17px; height:17px; border-radius:5px;
+    background:rgba(212,20,90,.16); border:1px solid rgba(212,20,90,.5); }
+  ul.checks li::after{ content:""; position:absolute; left:4.5px; top:6px; width:8px; height:5px;
+    border-left:2px solid var(--pink-light); border-bottom:2px solid var(--pink-light); transform:rotate(-45deg); }
+
+  .steps{ display:grid; gap:10px; }
+  .step{ display:flex; gap:14px; align-items:flex-start; border:1px solid var(--border); border-radius:14px; padding:14px 16px; background:var(--glass); }
+  .step .n{ flex:none; width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,var(--pink),var(--pink-light));
+    color:#fff; font-family:var(--display); font-weight:800; display:flex; align-items:center; justify-content:center; font-size:15px;
+    box-shadow:0 0 16px var(--pink-glow); }
+  .step h3{ font-size:14.5px; margin:2px 0 3px; color:#fff; }
+  .step p{ font-size:12.5px; color:var(--muted); margin:0; }
+
+  .stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:13px; margin-top:18px; }
+  .stat{ border:1px solid var(--border); border-radius:16px; padding:18px; background:var(--glass); text-align:center; }
+  .stat .v{ font-family:var(--display); font-weight:800; font-size:30px; color:var(--pink-light); text-shadow:0 0 18px var(--pink-glow); }
+  .stat .k{ font-size:12px; color:var(--muted); margin-top:5px; }
+
+  .sector{ border:1px solid var(--border); border-radius:16px; padding:18px; background:var(--glass); }
+  .sector .tag{ font-size:11px; font-weight:700; color:var(--pink); text-transform:uppercase; letter-spacing:.1em; }
+  .sector h3{ font-size:17px; margin:5px 0 11px; color:#fff; }
+
+  .callout{ border-radius:20px; padding:26px 28px; border:1px solid rgba(212,20,90,.4);
+    background:linear-gradient(135deg, rgba(212,20,90,.16), rgba(59,130,246,.10)); box-shadow:0 0 40px rgba(212,20,90,.15); }
+  .callout h2{ font-size:25px; color:#fff; margin-bottom:8px; }
+  .callout p{ color:var(--muted); font-size:13.5px; max-width:58ch; }
+  .cta{ display:inline-flex; align-items:center; gap:10px; margin-top:16px; background:linear-gradient(135deg,var(--pink),var(--pink-light));
+    color:#fff; font-weight:600; padding:12px 20px; border-radius:999px; font-size:13.5px; box-shadow:0 8px 30px var(--pink-glow); }
+
+  @media screen{ body{ background:#02060f; } .page{ box-shadow:0 20px 60px -30px rgba(0,0,0,.8); margin:18px auto; } }
+</style>
+</head>
+<body>
+
+<!-- ===== PORTADA ===== -->
+<section class="page cover-page"><div class="bg-logo"></div>
+  <div class="cover">
+    <div class="cover-top"><img class="cover-logo" src="logo.png" alt="fluentIA"></div>
+    <div class="mid">
+      <span class="eyebrow"><span class="dot"></span> Recepcionista virtual por WhatsApp</span>
+      <h1>Tu agenda llena, sin descolgar el teléfono.</h1>
+      <p class="lead">Un asistente con IA que atiende a tus clientes por WhatsApp 24/7: da, cambia y
+      cancela citas, recuerda las próximas y rellena los huecos que se liberan — solo, y con la voz de tu negocio.</p>
+      <div class="chips">
+        <span class="chip k">Peluquería</span>
+        <span class="chip k">Centro de estética</span>
+        <span class="chip k">Uñas</span>
+        <span class="chip k">Fisioterapia</span>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Inteligencia artificial para tu empresa. Hecha en Albacete.</span><span>fluentiatech.es</span></div>
+</section>
+
+<!-- ===== QUÉ ES + CÓMO FUNCIONA ===== -->
+<section class="page"><div class="bg-logo"></div>
+  <div class="brandbar" style="margin-bottom:24px"><img class="logo" src="logo.png" alt="fluentIA"></div>
+  <span class="kicker">Qué es</span>
+  <h2 class="title">Una recepcionista que vive en tu WhatsApp</h2>
+  <p class="sub">Tus clientes escriben como lo harían a una persona —"quiero corte el viernes por la tarde"—
+  y el asistente entiende, consulta tu agenda en tiempo real y cierra la cita. Sin apps que descargar,
+  sin formularios: la conversación de siempre, atendida al instante.</p>
+
+  <span class="kicker">Cómo funciona</span>
+  <h2 class="title" style="font-size:21px">De un mensaje a una cita confirmada</h2>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><div><h3>El cliente escribe</h3><p>Pide cita, pregunta precios u horarios, o quiere cambiar/cancelar. En lenguaje natural, a cualquier hora.</p></div></div>
+    <div class="step"><div class="n">2</div><div><h3>El asistente entiende y propone</h3><p>Detecta el servicio y el profesional, mira los huecos reales y ofrece horas. Si no le vale ninguna, sugiere otras.</p></div></div>
+    <div class="step"><div class="n">3</div><div><h3>Confirma y agenda</h3><p>El cliente dice "sí" y la cita queda reservada, sin solapes ni dobles reservas. Todo registrado.</p></div></div>
+    <div class="step"><div class="n">4</div><div><h3>Recuerda y rellena</h3><p>Avisa antes de la cita para reducir no-shows y, si alguien cancela, ofrece el hueco al siguiente en espera.</p></div></div>
+  </div>
+  <div class="foot"><span>fluentIA · Recepcionista virtual por WhatsApp</span><span>fluentiatech.es</span></div>
+</section>
+
+<!-- ===== CAPACIDADES ===== -->
+<section class="page"><div class="bg-logo"></div>
+  <div class="brandbar" style="margin-bottom:24px"><img class="logo" src="logo.png" alt="fluentIA"></div>
+  <span class="kicker">Capacidades</span>
+  <h2 class="title">Todo lo que hace por ti</h2>
+  <div class="grid2">
+    <div class="card glow">
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      <h3>Atención 24/7</h3><p>Responde al momento de día y de noche, fines de semana incluidos. No se pierde ni un mensaje.</p>
+    </div>
+    <div class="card">
+      <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+      <h3>Reservar, cambiar, cancelar</h3><p>Gestiona toda la cita por chat, incluso cambiar de día, hora o profesional, sin llamadas.</p>
+    </div>
+    <div class="card">
+      <div class="icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg></div>
+      <h3>Agenda real, sin solapes</h3><p>Huecos en tiempo real respetando horarios, profesionales y márgenes de limpieza. Cero dobles reservas.</p>
+    </div>
+    <div class="card">
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+      <h3>Recordatorios automáticos</h3><p>Avisa a cada cliente antes de su cita para reducir las ausencias y los huecos perdidos.</p>
+    </div>
+    <div class="card">
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg></div>
+      <h3>Lista de espera inteligente</h3><p>Si se libera un hueco por una cancelación, lo ofrece solo al siguiente cliente que esperaba.</p>
+    </div>
+    <div class="card glow">
+      <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.9H22l-5.8 4.2L18.5 22 12 17.7 5.5 22l2.3-8.9L2 8.9h7.6z"/></svg></div>
+      <h3>Con la voz de tu marca</h3><p>Nombre del asistente, tono, idioma y trato configurables. Saluda a los clientes habituales por su nombre.</p>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="v">24/7</div><div class="k">Atención sin horario</div></div>
+    <div class="stat"><div class="v">3 min</div><div class="k">Ahorrados en cada cita</div></div>
+    <div class="stat"><div class="v">0</div><div class="k">Dobles reservas</div></div>
+  </div>
+  <div class="foot"><span>fluentIA · Recepcionista virtual por WhatsApp</span><span>fluentiatech.es</span></div>
+</section>
+
+<!-- ===== BENEFICIOS ===== -->
+<section class="page"><div class="bg-logo"></div>
+  <div class="brandbar" style="margin-bottom:24px"><img class="logo" src="logo.png" alt="fluentIA"></div>
+  <span class="kicker">Beneficios</span>
+  <h2 class="title">Lo que gana tu negocio</h2>
+  <div class="grid2">
+    <ul class="checks">
+      <li><b>Menos ausencias (no-shows).</b> Los recordatorios y la confirmación por chat reducen los huecos perdidos.</li>
+      <li><b>Recuperas cancelaciones.</b> La lista de espera vuelve a llenar el hueco automáticamente.</li>
+      <li><b>Captas citas fuera de horario.</b> Reservas a las 23:00 o en domingo que con teléfono perderías.</li>
+      <li><b>Liberas a tu equipo.</b> Menos llamadas y mensajes que interrumpen mientras atendéis.</li>
+    </ul>
+    <ul class="checks">
+      <li><b>Mejor experiencia.</b> Respuesta inmediata, trato cercano y memoria del cliente ("lo de siempre").</li>
+      <li><b>Agenda ordenada.</b> Por profesional, con márgenes de limpieza y sin solapes.</li>
+      <li><b>Datos y control.</b> Panel con agenda, clientes, facturación y estadísticas.</li>
+      <li><b>Sin fricción.</b> Todo por WhatsApp: ni apps, ni registros, ni esperas.</li>
+    </ul>
+  </div>
+  <div style="margin-top:22px" class="callout">
+    <h2>Tú a lo importante: tus clientes.</h2>
+    <p>El asistente se ocupa de la agenda, los recordatorios y los huecos. Tú y tu equipo dedicáis
+    el tiempo a lo que de verdad genera ingresos y fideliza: el servicio.</p>
+  </div>
+  <div class="foot"><span>fluentIA · Recepcionista virtual por WhatsApp</span><span>fluentiatech.es</span></div>
+</section>
+
+<!-- ===== POR SECTOR ===== -->
+<section class="page"><div class="bg-logo"></div>
+  <div class="brandbar" style="margin-bottom:24px"><img class="logo" src="logo.png" alt="fluentIA"></div>
+  <span class="kicker">Por sector</span>
+  <h2 class="title">Adaptado a tu actividad</h2>
+  <div class="grid2">
+    <div class="sector">
+      <div class="tag">Peluquería</div>
+      <h3>Cada sillón, su profesional</h3>
+      <ul class="checks">
+        <li>El cliente elige peluquero/a o "me da igual" (se asigna al que menos carga tiene).</li>
+        <li>Servicios con duración real: corte, color, mechas… cada uno reserva su tiempo.</li>
+        <li>Recuerda su profesional habitual y su servicio de siempre.</li>
+      </ul>
+    </div>
+    <div class="sector">
+      <div class="tag">Centro de estética</div>
+      <h3>Tratamientos con su preparación</h3>
+      <ul class="checks">
+        <li>Márgenes de limpieza/preparación entre cabinas, sin agobios ni solapes.</li>
+        <li>Reserva por especialista y por tipo de tratamiento.</li>
+        <li>Recordatorios que reducen el hueco perdido en sesiones largas.</li>
+      </ul>
+    </div>
+    <div class="sector">
+      <div class="tag">Uñas</div>
+      <h3>Citas ágiles y encadenadas</h3>
+      <ul class="checks">
+        <li>Manicura, pedicura, semipermanente… cada servicio con su duración exacta.</li>
+        <li>Huecos cortos bien aprovechados con la agenda en tiempo real.</li>
+        <li>Lista de espera para llenar cancelaciones de última hora.</li>
+      </ul>
+    </div>
+    <div class="sector">
+      <div class="tag">Fisioterapia</div>
+      <h3>Sesiones y seguimiento</h3>
+      <ul class="checks">
+        <li>Reserva por fisio y por tipo de sesión, con el tiempo de cada una.</li>
+        <li>Recordatorios que mejoran la adherencia al tratamiento.</li>
+        <li>Reprogramación fácil por chat cuando el paciente no puede.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>fluentIA · Recepcionista virtual por WhatsApp</span><span>fluentiatech.es</span></div>
+</section>
+
+<!-- ===== SEGURIDAD + CTA ===== -->
+<section class="page"><div class="bg-logo"></div>
+  <div class="brandbar" style="margin-bottom:24px"><img class="logo" src="logo.png" alt="fluentIA"></div>
+  <span class="kicker">Confianza</span>
+  <h2 class="title">Seguro y conforme al RGPD</h2>
+  <div class="grid2">
+    <ul class="checks">
+      <li>Datos personales <b>cifrados</b> y acceso al panel restringido.</li>
+      <li>Consentimiento del cliente y <b>purga automática</b> de datos antiguos.</li>
+      <li>Registro de auditoría y avisos de seguridad.</li>
+    </ul>
+    <ul class="checks">
+      <li>El asistente <b>nunca inventa</b> disponibilidad: la agenda manda.</li>
+      <li>Las reservas las valida un sistema determinista, no el modelo.</li>
+      <li>Funciona sobre la <b>API oficial de WhatsApp</b>.</li>
+    </ul>
+  </div>
+
+  <div style="margin-top:24px" class="callout">
+    <span class="eyebrow" style="margin-bottom:14px"><span class="dot"></span> Demo en vivo · gratis y sin compromiso</span>
+    <h2 style="margin-top:14px">Pruébalo con tus propias citas</h2>
+    <p>Te montamos una demo en vivo con tus servicios, horarios y profesionales: en 5 minutos
+    reservas una cita de prueba por WhatsApp y lo ves funcionar con tu negocio — gratis y sin permanencia.
+    Escríbenos y la preparamos hoy mismo.</p>
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center">
+      <span class="cta">diego.morales@fluentiatech.es</span>
+      <span class="cta" style="background:linear-gradient(135deg,#1a2b5f,#3b82f6); box-shadow:0 8px 30px rgba(59,130,246,.25)">Demo por WhatsApp · +34 697 947 595</span>
+    </div>
+    <p style="margin-top:14px; color:var(--muted); font-size:13px">fluentiatech.es · Inteligencia artificial para tu empresa. Hecha en Albacete.</p>
+  </div>
+  <div class="foot"><span>fluentIA · Recepcionista virtual por WhatsApp</span><span>fluentiatech.es</span></div>
+</section>
+
+</body>
+</html>
