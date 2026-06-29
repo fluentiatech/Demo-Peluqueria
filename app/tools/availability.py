@@ -167,3 +167,88 @@ async def check_availability(
         day += timedelta(days=1)
 
     return slots
+
+
+async def free_resources_at(
+    session: AsyncSession,
+    business_id: str,
+    service_id: str,
+    start_at: datetime,
+) -> list[Slot]:
+    """Profesionales cualificados libres para EMPEZAR el servicio justo a `start_at`.
+
+    A diferencia de `check_availability` (que devuelve un hueco por hora), aquí
+    devolvemos TODOS los recursos que pueden atender a esa hora exacta: sirve para
+    proponer «otro profesional libre a la hora que pediste».
+    """
+    business = await session.get(Business, business_id)
+    service = await session.get(Service, service_id)
+    if business is None or service is None or service.business_id != business_id:
+        return []
+
+    start = timez.to_local(timez.aware(start_at))
+    if start < timez.now():
+        return []
+    day = start.date()
+    svc_end = start + timedelta(minutes=service.duration_min)
+    block0 = start - timedelta(minutes=service.buffer_before_min)
+    block1 = svc_end + timedelta(minutes=service.buffer_after_min)
+
+    eligible = await eligible_resource_ids(session, service_id)
+    res_query = select(Resource).where(
+        Resource.business_id == business_id, Resource.active.is_(True)
+    )
+    if eligible is not None:
+        res_query = res_query.where(Resource.id.in_(eligible))
+    resources = (await session.scalars(res_query)).all()
+    if not resources:
+        return []
+
+    closures = await closures_by_date(session, business_id, day, day)
+    biz_intervals = business_day_intervals(business, closures.get(day), day)
+    if not biz_intervals:
+        return []
+
+    range_start = timez.local(day, time.min)
+    range_end = timez.local(day + timedelta(days=1), time.min)
+    busy: dict[str, list[tuple[datetime, datetime]]] = {}
+    appts = (
+        await session.scalars(
+            select(Appointment).where(
+                Appointment.business_id == business_id,
+                Appointment.status.in_(_BLOCKING_STATUSES),
+                Appointment.block_start_at < range_end,
+                Appointment.block_end_at > range_start,
+            )
+        )
+    ).all()
+    for a in appts:
+        busy.setdefault(a.resource_id, []).append(
+            (timez.to_local(a.block_start_at), timez.to_local(a.block_end_at))
+        )
+    offs = (
+        await session.scalars(
+            select(TimeOff).where(
+                TimeOff.business_id == business_id,
+                TimeOff.start_at < range_end,
+                TimeOff.end_at > range_start,
+            )
+        )
+    ).all()
+    for o in offs:
+        busy.setdefault(o.resource_id, []).append(
+            (timez.to_local(o.start_at), timez.to_local(o.end_at))
+        )
+
+    out: list[Slot] = []
+    for res in resources:
+        intervals = resource_day_intervals(biz_intervals, res, day)
+        if not _fits(intervals, day, start, svc_end):
+            continue
+        if any(overlaps(block0, block1, b0, b1) for b0, b1 in busy.get(res.id, [])):
+            continue
+        out.append(
+            Slot(resource_id=res.id, resource_name=res.name,
+                 start_at=start, end_at=svc_end)
+        )
+    return out

@@ -100,11 +100,36 @@ def offer_slots(slots: list[str]) -> str:
     )
 
 
+def alt_professional(
+    orig_name: str | None, alt_name: str, when: str
+) -> str:
+    """A esa hora el profesional pedido no puede, pero otro sí está libre."""
+    quien = f"*{_first_name(orig_name)}*" if orig_name else "ese profesional"
+    return (
+        f"Uy, {quien} no tiene hueco el *{when}* 😕\n\n"
+        f"Pero *{_first_name(alt_name)}* sí está *libre a esa hora*.\n"
+        f"¿Te lo reservo con *{_first_name(alt_name)}*? _(sí / no)_"
+    )
+
+
+def nearest_with_pro(pro_name: str | None, when: str) -> str:
+    """Hueco más cercano con el profesional originalmente pedido."""
+    con = f" con *{_first_name(pro_name)}*" if pro_name else ""
+    return (
+        f"El hueco más cercano{con} es el *{when}* 🗓️\n\n"
+        "¿Te viene bien? _(sí / no)_"
+    )
+
+
 def ask_choice_again() -> str:
     return (
         "No me ha quedado claro 🤔\n\n"
         "Dime el *número* de la opción o la *hora* que prefieres."
     )
+
+
+def confirm_yes_no() -> str:
+    return "Cuéntame 🙂 ¿*sí* o *no*?"
 
 
 def ask_name() -> str:

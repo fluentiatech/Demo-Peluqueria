@@ -56,7 +56,7 @@ def fast_classify(state: S, text: str, has_offered: bool) -> Extraction | None:
     if not t and not has_thumbs:
         return None
 
-    if state in (S.CONFIRMING, S.WAITLIST_OFFER):
+    if state in (S.CONFIRMING, S.WAITLIST_OFFER, S.OFFER_ALT_PRO, S.OFFER_NEAREST):
         if has_thumbs or t in _AFFIRM:
             return _ext("confirm")
         if t in _NEGATE:

@@ -8,7 +8,7 @@ cierra una transacción: por eso una inyección de prompt no puede forzar una ci
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import Select, select
@@ -41,6 +41,7 @@ from app.tools import (
     book_appointment,
     cancel_appointment,
     check_availability,
+    free_resources_at,
     reschedule_appointment,
 )
 
@@ -313,8 +314,12 @@ async def _dispatch(
     state = convo.state
 
     # Abortar un flujo en curso si el cliente lo cancela explícitamente.
+    # Excepción: en las ofertas escalonadas un "no" no aborta, significa
+    # «pásame a la siguiente alternativa» (lo gestiona el handler del estado).
     aborting = intent in (Intent.CANCEL.value, Intent.DENY.value)
-    if state != S.IDLE and aborting and not ctx.get("action"):
+    _offer_states = (S.OFFER_ALT_PRO, S.OFFER_NEAREST)
+    deny_is_next = state in _offer_states and intent == Intent.DENY.value
+    if state != S.IDLE and aborting and not ctx.get("action") and not deny_is_next:
         _set(convo, S.IDLE, {})
         return replies.aborted()
 
@@ -335,10 +340,18 @@ async def _dispatch(
         )
 
     if state == S.COLLECTING_DATETIME:
-        return await _collecting_datetime(session, business, convo, ext, intent, ctx)
+        return await _collecting_datetime(
+            session, business, convo, ext, intent, ctx, professionals
+        )
 
     if state == S.COLLECTING_CONTACT:
         return _collecting_contact(convo, ext, ctx)
+
+    if state == S.OFFER_ALT_PRO:
+        return await _offer_alt_pro(session, business, convo, intent, ctx)
+
+    if state == S.OFFER_NEAREST:
+        return await _offer_nearest(session, business, convo, intent, ctx)
 
     if state == S.WAITLIST_OFFER:
         return await _waitlist_offer(session, business, convo, phone, intent, ctx)
@@ -414,10 +427,12 @@ async def _after_service(
     ctx = {**ctx, "service_id": service.id, "service_name": service.name}
     pro = _match_resource(professionals, ext.data.get("professional"))
     if pro == "ANY":
-        return await _begin_datetime(session, business, convo, ext, {**ctx, "any_pro": True})
+        return await _begin_datetime(
+            session, business, convo, ext, {**ctx, "any_pro": True}, professionals
+        )
     if isinstance(pro, ResourceRef):
         ctx = {**ctx, "resource_id": pro.id, "professional_name": pro.name}
-        return await _begin_datetime(session, business, convo, ext, ctx)
+        return await _begin_datetime(session, business, convo, ext, ctx, professionals)
     # No lo dijo (o no se reconoce): preguntamos.
     _set(convo, S.COLLECTING_PROFESSIONAL, ctx)
     return replies.ask_professional([p.name for p in professionals])
@@ -448,13 +463,14 @@ async def _begin_datetime(
     convo: Conversation,
     ext: Extraction,
     ctx: dict[str, Any],
+    professionals: tuple[ResourceRef, ...],
 ) -> str:
     """Con servicio y profesional fijados; si ya hay fecha, oferta huecos ya."""
     if _resolve_date(ext) is None:
         _set(convo, S.COLLECTING_DATETIME, ctx)
         return replies.ask_date(ctx["service_name"])
     return await _collecting_datetime(
-        session, business, convo, ext, Intent.CHOOSE.value, ctx
+        session, business, convo, ext, Intent.CHOOSE.value, ctx, professionals
     )
 
 
@@ -473,26 +489,36 @@ async def _collecting_service(
     return await _after_service(session, business, convo, ext, ctx, service, professionals)
 
 
-async def _collecting_datetime(session, business, convo, ext, intent, ctx) -> str:
-    # Sub-paso 1: aún no hemos ofertado huecos → esperamos una fecha.
+async def _collecting_datetime(
+    session, business, convo, ext, intent, ctx, professionals
+) -> str:
+    # El cliente puede cambiar de profesional en cualquier momento del flujo:
+    # si nombra a otro (o «me da igual»), reajustamos y volvemos a buscar.
+    prev_day = None
+    if ctx.get("offered"):
+        prev_day = datetime.fromisoformat(ctx["offered"][0]["start_at"]).date()
+    pro = _match_resource(professionals, ext.data.get("professional"))
+    if isinstance(pro, ResourceRef) and pro.id != ctx.get("resource_id"):
+        ctx = {**ctx, "resource_id": pro.id, "professional_name": pro.name,
+               "any_pro": False}
+        ctx.pop("offered", None)
+    elif pro == "ANY" and not ctx.get("any_pro"):
+        ctx = {**ctx, "any_pro": True, "resource_id": None}
+        ctx.pop("offered", None)
+
+    # Sub-paso 1: aún no hay huecos ofertados → necesitamos día (y quizá hora).
     if not ctx.get("offered"):
-        day = _resolve_date(ext)
+        day = _resolve_date(ext) or prev_day
+        want = _norm_time(ext.data.get("time"))
         if day is None:
             return "¿Qué *día* te viene bien? _(p. ej. mañana, el viernes, 30/06)_"
+        if want:
+            return await _request_specific_time(session, business, convo, ctx, day, want)
         slots = await _find_slots(
             session, business.id, ctx["service_id"], day, ctx.get("resource_id")
         )
         if not slots:
-            # Sin huecos: ofrecemos la lista de espera (relleno de cancelaciones).
-            wctx = {
-                "service_id": ctx["service_id"],
-                "service_name": ctx["service_name"],
-                "resource_id": ctx.get("resource_id"),
-                "any_pro": ctx.get("any_pro", False),
-                "desired_date": day.isoformat(),
-            }
-            _set(convo, S.WAITLIST_OFFER, wctx)
-            return replies.ask_waitlist(ctx["service_name"])
+            return await _go_waitlist(session, business, convo, ctx, day)
         ctx = {**ctx, "offered": _offered_from_slots(slots)}
         _set(convo, S.COLLECTING_DATETIME, ctx)
         return replies.offer_slots([o["label"] for o in ctx["offered"]])
@@ -555,37 +581,160 @@ async def _propose_new(session, business, convo, ext, ctx: dict[str, Any]) -> st
         return replies.ask_choice_again()
 
     want = _norm_time(ext.data.get("time"))
-    # Si pide una hora concreta, miramos TODO el día (no solo los primeros huecos).
-    limit = 80 if want else MAX_OFFER
+    if want:
+        # Hora concreta: la resolvemos con el escalado profesional/cercano/espera.
+        return await _request_specific_time(session, business, convo, ctx, day, want)
+
     slots = await check_availability(
         session, business.id, ctx["service_id"], day, day,
-        resource_id=ctx.get("resource_id"), limit=limit,
+        resource_id=ctx.get("resource_id"), limit=MAX_OFFER,
     )
     if not slots:
-        wctx = {
-            "service_id": ctx["service_id"],
-            "service_name": ctx["service_name"],
-            "resource_id": ctx.get("resource_id"),
-            "any_pro": ctx.get("any_pro", False),
-            "desired_date": day.isoformat(),
-        }
-        _set(convo, S.WAITLIST_OFFER, wctx)
-        return replies.ask_waitlist(ctx["service_name"])
-
-    offered = _offered_from_slots(slots)
-    if want:
-        match = next(
-            (o for o in offered
-             if datetime.fromisoformat(o["start_at"]).strftime("%H:%M") == want),
-            None,
-        )
-        if match is not None:
-            return await _choose_slot(session, business, convo, ctx, dict(match))
-        # La hora pedida no está libre → mostramos las que sí lo están.
-    offered = offered[:MAX_OFFER]
+        return await _go_waitlist(session, business, convo, ctx, day)
+    offered = _offered_from_slots(slots)[:MAX_OFFER]
     ctx = {**ctx, "offered": offered}
     _set(convo, S.COLLECTING_DATETIME, ctx)
     return replies.offer_slots([o["label"] for o in offered])
+
+
+def _slot_offer(slot: Any) -> dict[str, Any]:
+    """Serializa un Slot al formato compacto que guardamos en el contexto."""
+    return {
+        "resource_id": slot.resource_id,
+        "start_at": slot.start_at.isoformat(),
+        "label": replies.fmt_slot(slot.start_at),
+    }
+
+
+def _strip_offers(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Quita las claves auxiliares de las ofertas escalonadas antes de confirmar."""
+    return {k: v for k, v in ctx.items() if k not in ("alt", "nearest", "day")}
+
+
+async def _request_specific_time(
+    session, business, convo, ctx: dict[str, Any], day: date, want: str
+) -> str:
+    """El cliente pide una HORA concreta. Si su profesional no puede a esa hora,
+    escalamos: 1) otro profesional libre a esa hora, 2) la hora más cercana con su
+    profesional, 3) lista de espera."""
+    hh, mm = (int(x) for x in want.split(":"))
+    dt = timez.local(day, time(hh, mm))
+    free = await free_resources_at(session, business.id, ctx["service_id"], dt)
+
+    # Sin profesional fijo ("me da igual"): cualquiera libre a esa hora vale.
+    if ctx.get("any_pro") or not ctx.get("resource_id"):
+        if free:
+            return await _choose_slot(session, business, convo, ctx, _slot_offer(free[0]))
+        slots = await _find_slots(session, business.id, ctx["service_id"], day, None)
+        if not slots:
+            return await _go_waitlist(session, business, convo, ctx, day)
+        ctx = {**ctx, "offered": _offered_from_slots(slots)}
+        _set(convo, S.COLLECTING_DATETIME, ctx)
+        return replies.offer_slots([o["label"] for o in ctx["offered"]])
+
+    # Profesional concreto pedido.
+    resource_id = ctx["resource_id"]
+    mine = next((s for s in free if s.resource_id == resource_id), None)
+    if mine is not None:  # su profesional sí está libre a esa hora.
+        return await _choose_slot(session, business, convo, ctx, _slot_offer(mine))
+
+    others = [s for s in free if s.resource_id != resource_id]
+    if others:  # 1) recomendamos otro profesional libre a esa misma hora.
+        alt = others[0]
+        ctx2 = {**ctx, "alt": _slot_offer(alt), "day": day.isoformat(), "want": want}
+        _set(convo, S.OFFER_ALT_PRO, ctx2)
+        return replies.alt_professional(
+            ctx.get("professional_name"), alt.resource_name,
+            replies.fmt_slot(alt.start_at),
+        )
+    # 2) nadie más libre a esa hora → la hora más cercana con su profesional.
+    return await _go_nearest(session, business, convo, ctx, day, target=dt)
+
+
+def _target_dt(day_iso: str | None, want: str | None) -> datetime | None:
+    """Reconstruye la hora pedida (para medir cercanía) desde el contexto."""
+    if not day_iso or not want:
+        return None
+    hh, mm = (int(x) for x in want.split(":"))
+    return timez.local(date.fromisoformat(day_iso), time(hh, mm))
+
+
+async def _go_nearest(
+    session, business, convo, ctx: dict[str, Any], from_day: date,
+    target: datetime | None = None,
+) -> str:
+    """Ofrece el hueco más cercano con el profesional pedido (o lista de espera).
+
+    Si conocemos la hora deseada, elegimos el hueco de ese día más próximo a ella;
+    si ese día no queda ninguno, el primero disponible en los próximos días.
+    """
+    day_slots = await check_availability(
+        session, business.id, ctx["service_id"], from_day, from_day,
+        resource_id=ctx.get("resource_id"), limit=80,
+    )
+    if day_slots and target is not None:
+        nearest = min(
+            day_slots,
+            key=lambda s: abs((timez.to_local(s.start_at) - target).total_seconds()),
+        )
+    elif day_slots:
+        nearest = day_slots[0]
+    else:
+        ahead = await _find_slots(
+            session, business.id, ctx["service_id"], from_day, ctx.get("resource_id")
+        )
+        if not ahead:
+            return await _go_waitlist(session, business, convo, ctx, from_day)
+        nearest = ahead[0]
+
+    ctx2 = {**ctx, "nearest": _slot_offer(nearest), "day": from_day.isoformat()}
+    _set(convo, S.OFFER_NEAREST, ctx2)
+    return replies.nearest_with_pro(
+        ctx.get("professional_name"), replies.fmt_slot(nearest.start_at)
+    )
+
+
+async def _go_waitlist(
+    session, business, convo, ctx: dict[str, Any], day: date | None = None
+) -> str:
+    """Último recurso: ofrecer apuntar a la lista de espera."""
+    wctx = {
+        "service_id": ctx["service_id"],
+        "service_name": ctx["service_name"],
+        "resource_id": ctx.get("resource_id"),
+        "any_pro": ctx.get("any_pro", False),
+        "desired_date": day.isoformat() if day else ctx.get("desired_date"),
+    }
+    _set(convo, S.WAITLIST_OFFER, wctx)
+    return replies.ask_waitlist(ctx["service_name"])
+
+
+async def _offer_alt_pro(session, business, convo, intent, ctx: dict[str, Any]) -> str:
+    """Respuesta a «¿te lo reservo con otro profesional a esa hora?»."""
+    if intent == Intent.CONFIRM.value:
+        return await _choose_slot(
+            session, business, convo, _strip_offers(ctx), dict(ctx["alt"])
+        )
+    if intent == Intent.DENY.value:  # no quiere otro pro → su hora más cercana.
+        return await _go_nearest(
+            session, business, convo, _strip_offers(ctx),
+            date.fromisoformat(ctx["day"]),
+            target=_target_dt(ctx.get("day"), ctx.get("want")),
+        )
+    return replies.confirm_yes_no()
+
+
+async def _offer_nearest(session, business, convo, intent, ctx: dict[str, Any]) -> str:
+    """Respuesta a «¿te vale la hora más cercana con tu profesional?»."""
+    if intent == Intent.CONFIRM.value:
+        return await _choose_slot(
+            session, business, convo, _strip_offers(ctx), dict(ctx["nearest"])
+        )
+    if intent == Intent.DENY.value:  # tampoco → lista de espera.
+        return await _go_waitlist(
+            session, business, convo, _strip_offers(ctx), date.fromisoformat(ctx["day"])
+        )
+    return replies.confirm_yes_no()
 
 
 def _collecting_contact(convo, ext, ctx) -> str:

@@ -3,7 +3,7 @@
 Toda la lógica crítica de reservas vive aquí, no en el prompt del LLM.
 El agente sólo invoca estas funciones; nunca decide él la transacción.
 """
-from app.tools.availability import check_availability
+from app.tools.availability import check_availability, free_resources_at
 from app.tools.booking import (
     BookingError,
     OutOfHoursError,
@@ -33,6 +33,7 @@ __all__ = [
     "book_appointment",
     "cancel_appointment",
     "check_availability",
+    "free_resources_at",
     "get_pricing",
     "list_service_resources",
     "list_services",

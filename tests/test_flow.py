@@ -364,6 +364,132 @@ async def test_reschedule_can_change_professional(db_session, seed):
 
 
 # --------------------------------------------------------------------------- #
+#  Hora ocupada: escalado profesional alternativo → hora cercana → espera
+# --------------------------------------------------------------------------- #
+async def _busy(db_session, seed, resource_idx, when):
+    """Ocupa un recurso a una hora concreta (otra persona ya tiene cita)."""
+    await book_appointment(
+        db_session,
+        business_id=seed.business_id,
+        service_id=seed.service_ids["Corte"],
+        start_at=when,
+        phone="+34699998888",
+        resource_id=seed.resource_ids[resource_idx],
+    )
+    await db_session.commit()
+
+
+async def test_busy_time_recommends_alternative_professional(db_session, seed):
+    """Su profesional no puede a esa hora, pero otro sí: se lo recomendamos."""
+    from app import timez
+
+    business = await _business(db_session, seed)
+    monday = next_weekday(0)
+    await _busy(db_session, seed, 0, datetime.combine(monday, time(10, 0)))  # Sillón 1
+
+    llm = FakeLLM(extractions=[
+        {"intent": "book", "service": "Corte", "professional": "Sillón 1"},
+        {"intent": "choose", "date": monday.isoformat(), "time": "10:00"},
+        {"intent": "provide_name", "name": "Ana"},
+    ])
+    await _say(db_session, business, llm, "corte con sillón 1")
+    r2 = await _say(db_session, business, llm, "el lunes a las 10")
+    assert "libre a esa hora" in r2.lower()      # ofrece otro profesional
+    r3 = await _say(db_session, business, llm, "sí")   # acepta al otro profesional
+    assert "nombre" in r3.lower()
+    await _say(db_session, business, llm, "Ana")
+    r5 = await _say(db_session, business, llm, "sí")
+    assert "listo" in r5.lower()
+
+    appt = await db_session.scalar(
+        select(Appointment).where(
+            Appointment.business_id == seed.business_id,
+            Appointment.customer_id.isnot(None),
+            Appointment.resource_id == seed.resource_ids[1],
+        )
+    )
+    assert appt is not None                       # reservada con Sillón 2
+    assert timez.to_local(appt.start_at).hour == 10
+
+
+async def test_decline_alt_pro_offers_nearest_with_same_pro(db_session, seed):
+    """Si no quiere otro profesional, se le ofrece la hora más cercana con el suyo."""
+    business = await _business(db_session, seed)
+    monday = next_weekday(0)
+    await _busy(db_session, seed, 0, datetime.combine(monday, time(10, 0)))  # Sillón 1
+
+    llm = FakeLLM(extractions=[
+        {"intent": "book", "service": "Corte", "professional": "Sillón 1"},
+        {"intent": "choose", "date": monday.isoformat(), "time": "10:00"},
+        {"intent": "provide_name", "name": "Ana"},
+    ])
+    await _say(db_session, business, llm, "corte con sillón 1")
+    await _say(db_session, business, llm, "el lunes a las 10")
+    r3 = await _say(db_session, business, llm, "no")    # rechaza al otro profesional
+    assert "cercano" in r3.lower()
+    r4 = await _say(db_session, business, llm, "sí")    # acepta la hora cercana
+    assert "nombre" in r4.lower()
+    await _say(db_session, business, llm, "Ana")
+    await _say(db_session, business, llm, "sí")
+
+    appt = await db_session.scalar(
+        select(Appointment).where(
+            Appointment.business_id == seed.business_id,
+            Appointment.customer_id.isnot(None),
+        )
+    )
+    assert appt.resource_id == seed.resource_ids[0]    # se mantuvo en Sillón 1
+
+
+async def test_no_alt_and_decline_nearest_offers_waitlist(db_session, seed):
+    """Nadie libre a esa hora y rechaza la cercana → lista de espera."""
+    business = await _business(db_session, seed)
+    monday = next_weekday(0)
+    # Ambos sillones ocupados a las 10:00 → no hay profesional alternativo.
+    await _busy(db_session, seed, 0, datetime.combine(monday, time(10, 0)))
+    await _busy(db_session, seed, 1, datetime.combine(monday, time(10, 0)))
+
+    llm = FakeLLM(extractions=[
+        {"intent": "book", "service": "Corte", "professional": "Sillón 1"},
+        {"intent": "choose", "date": monday.isoformat(), "time": "10:00"},
+    ])
+    await _say(db_session, business, llm, "corte con sillón 1")
+    r2 = await _say(db_session, business, llm, "el lunes a las 10")
+    assert "cercano" in r2.lower()                 # sin alternativo: salta a la cercana
+    r3 = await _say(db_session, business, llm, "no")   # tampoco la cercana
+    assert "avise" in r3.lower() or "libere" in r3.lower()  # lista de espera
+
+
+async def test_change_professional_midflow(db_session, seed):
+    """El cliente puede cambiar de profesional a mitad del flujo de reserva."""
+    business = await _business(db_session, seed)
+    monday = next_weekday(0)
+    llm = FakeLLM(extractions=[
+        {"intent": "book", "service": "Corte", "professional": "Sillón 1"},
+        {"intent": "choose", "date": monday.isoformat()},          # huecos de Sillón 1
+        {"intent": "choose", "professional": "Sillón 2"},          # cambia de profesional
+        {"intent": "choose", "choice_index": 1},
+        {"intent": "provide_name", "name": "Ana"},
+    ])
+    await _say(db_session, business, llm, "corte con sillón 1")
+    r2 = await _say(db_session, business, llm, "el lunes")
+    assert "huecos" in r2.lower()
+    r3 = await _say(db_session, business, llm, "mejor con sillón 2")
+    assert "huecos" in r3.lower()                  # re-oferta con el nuevo profesional
+    await _say(db_session, business, llm, "la primera")
+    await _say(db_session, business, llm, "Ana")
+    await _say(db_session, business, llm, "sí")
+
+    appt = await db_session.scalar(
+        select(Appointment).where(
+            Appointment.business_id == seed.business_id,
+            Appointment.customer_id.isnot(None),
+        )
+    )
+    assert appt.resource_id == seed.resource_ids[1]  # acabó con Sillón 2
+
+
+# --------------------------------------------------------------------------- #
 #  Handoff y Q&A
 # --------------------------------------------------------------------------- #
 async def test_handoff_then_silence(db_session, seed):

@@ -22,6 +22,8 @@ class ConversationState(enum.StrEnum):
     COLLECTING_DATETIME = "collecting_datetime"
     COLLECTING_CONTACT = "collecting_contact"
     CONFIRMING = "confirming"
+    OFFER_ALT_PRO = "offer_alt_pro"    # tu profesional no puede a esa hora: ¿otro libre?
+    OFFER_NEAREST = "offer_nearest"    # ¿te vale la hora más cercana con tu profesional?
     WAITLIST_OFFER = "waitlist_offer"  # sin huecos: ¿te apunto a la lista de espera?
     MANAGE_BOOKING = "manage_booking"
     HUMAN_HANDOFF = "human_handoff"
