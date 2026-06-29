@@ -55,7 +55,11 @@ async def test_snapshot_freezes_price_and_duration(db_session, seed):
 # --------------------------------------------------------------------------- #
 #  Endpoint de estado (back-office)
 # --------------------------------------------------------------------------- #
-async def test_admin_can_mark_status(client, seed):
+async def test_attendance_only_markable_after_start(client, db_session, seed):
+    from datetime import timedelta
+
+    from app import timez
+
     start = datetime.combine(next_weekday(0), time(11, 0)).isoformat()
     booking = await client.post(
         f"/admin/businesses/{seed.business_id}/appointments",
@@ -66,15 +70,22 @@ async def test_admin_can_mark_status(client, seed):
         },
     )
     appt = booking.json()
-    assert appt["status"] == "pending"
-    assert appt["price"] == "12.00" and appt["duration_min"] == 30
-
+    assert appt["status"] == "pending"  # nace pendiente
     aid = appt["id"]
-    for new_status in ("confirmed", "completed", "no_show"):
-        resp = await client.post(
-            f"/admin/businesses/{seed.business_id}/appointments/{aid}/status",
-            json={"status": new_status},
-        )
+
+    url = f"/admin/businesses/{seed.business_id}/appointments/{aid}/status"
+    # Cita futura: marcar "asistió"/"no vino" se rechaza (aún no ha empezado).
+    early = await client.post(url, json={"status": "completed"})
+    assert early.status_code == 400
+
+    # Simulamos que la cita ya empezó (hora de inicio en el pasado).
+    obj = await db_session.get(Appointment, aid)
+    obj.start_at = timez.now() - timedelta(hours=1)
+    await db_session.commit()
+
+    # Ahora sí se puede marcar la asistencia.
+    for new_status in ("completed", "no_show", "pending"):
+        resp = await client.post(url, json={"status": new_status})
         assert resp.status_code == 200
         assert resp.json()["status"] == new_status
 

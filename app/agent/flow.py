@@ -674,8 +674,8 @@ async def _confirming(session, business, convo, phone, intent, ctx, message_id) 
                 name=ctx.get("name"),
                 resource_id=chosen.get("resource_id"),
                 idempotency_key=message_id,
-                # El cliente acaba de confirmar por chat → queda CONFIRMADA.
-                status=AppointmentStatus.CONFIRMED,
+                # Toda cita nace PENDIENTE; la asistencia se marca tras la hora.
+                status=AppointmentStatus.PENDING,
             )
             _set(convo, S.IDLE, {})
             return replies.booking_done(

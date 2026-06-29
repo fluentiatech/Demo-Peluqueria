@@ -203,7 +203,8 @@ const Panel = (() => {
   const STATUS = {
     pending: "Pendiente", confirmed: "Confirmada", completed: "Asistió", no_show: "No vino",
   };
-  const STATUS_ORDER = ["pending", "confirmed", "completed", "no_show"];
+  // Estados que el operador marca en la agenda (la cita nace "Pendiente").
+  const STATUS_ORDER = ["pending", "completed", "no_show"];
   const chip = (s) => `<span class="chip ${s}">${STATUS[s] || s}</span>`;
 
   // Modal/popup reutilizable. onSubmit(modalEl, close) lee los campos y cierra.

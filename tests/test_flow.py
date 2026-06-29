@@ -57,8 +57,8 @@ async def test_full_booking_flow(db_session, seed):
         select(Appointment).where(Appointment.business_id == seed.business_id)
     )
     assert appt is not None
-    # Confirmada por el cliente en el chat → queda CONFIRMED, no PENDING.
-    assert appt.status == AppointmentStatus.CONFIRMED
+    # Toda cita nace PENDIENTE; la asistencia se marca después.
+    assert appt.status == AppointmentStatus.PENDING
     # Snapshot del servicio congelado en la cita.
     assert appt.service_name == "Corte"
     assert appt.price == Decimal("12.00")

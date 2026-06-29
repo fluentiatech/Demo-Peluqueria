@@ -12,11 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import timez
 from app.agent.context import invalidate_context
 from app.audit import verify_chain
 from app.database import get_session
 from app.models import (
     Appointment,
+    AppointmentStatus,
     AuditLog,
     Business,
     BusinessClosure,
@@ -624,10 +626,19 @@ async def set_status(
     payload: StatusUpdate,
     session: AsyncSession = Depends(get_session),
 ) -> AppointmentOut:
-    """Marca el estado desde el back-office (confirmar, completar, no-show…)."""
+    """Marca el estado desde el back-office.
+
+    "Asistió"/"No vino" solo pueden marcarse una vez ha pasado la hora de inicio
+    de la cita: antes de que empiece no se sabe si el cliente acudió.
+    """
     appt = await session.get(Appointment, appointment_id)
     if appt is None or appt.business_id != business_id:
         raise HTTPException(404, "Cita no encontrada")
+    attendance = {AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW}
+    if payload.status in attendance and timez.aware(appt.start_at) > timez.now():
+        raise HTTPException(
+            400, "Aún no se puede marcar la asistencia: la cita no ha empezado"
+        )
     appt.status = payload.status
     await session.flush()
     return AppointmentOut.model_validate(appt)

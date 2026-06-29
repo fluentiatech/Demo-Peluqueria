@@ -42,10 +42,15 @@
   }
 
   function seg(it) {
+    // "Asistió"/"No vino" solo cuando ya ha pasado la hora de inicio de la cita.
+    const started = new Date(it.start_at) <= new Date();
     return '<div class="seg" data-id="' + it.id + '">' +
-      Panel.STATUS_ORDER.map((s) =>
-        `<button data-st="${s}" class="${it.status === s ? "on" : ""}">${Panel.STATUS[s]}</button>`
-      ).join("") + "</div>";
+      Panel.STATUS_ORDER.map((s) => {
+        const locked = !started && (s === "completed" || s === "no_show");
+        const cls = (it.status === s ? "on" : "") + (locked ? " locked" : "");
+        const t = locked ? ' title="Disponible cuando empiece la cita"' : "";
+        return `<button data-st="${s}" class="${cls}"${locked ? " disabled" : ""}${t}>${Panel.STATUS[s]}</button>`;
+      }).join("") + "</div>";
   }
 
   function render() {
@@ -81,7 +86,7 @@
     const del = e.target.closest("[data-del]");
     if (del) return remove(del.dataset.del);
     const segBtn = e.target.closest(".seg button");
-    if (!segBtn) return;
+    if (!segBtn || segBtn.disabled) return;
     const id = segBtn.closest(".seg").dataset.id;
     const it = data.items.find((i) => i.id === id);
     if (!it || it.status === segBtn.dataset.st) return;
