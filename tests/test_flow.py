@@ -475,6 +475,7 @@ async def test_change_professional_midflow(db_session, seed):
     r2 = await _say(db_session, business, llm, "el lunes")
     assert "huecos" in r2.lower()
     r3 = await _say(db_session, business, llm, "mejor con sillón 2")
+    assert "vale" in r3.lower()                     # confirma que entendió el cambio
     assert "huecos" in r3.lower()                  # re-oferta con el nuevo profesional
     await _say(db_session, business, llm, "la primera")
     await _say(db_session, business, llm, "Ana")

@@ -132,6 +132,13 @@ def confirm_yes_no() -> str:
     return "Cuéntame 🙂 ¿*sí* o *no*?"
 
 
+def professional_switched(pro_name: str | None) -> str:
+    """Confirmación breve al cambiar de profesional a mitad de flujo (se antepone)."""
+    if pro_name is None:  # «me da igual»
+        return "👌 *Vale, te busco con cualquier profesional.*\n\n"
+    return f"👌 *Vale, te paso los huecos con {_first_name(pro_name)}.*\n\n"
+
+
 def ask_name() -> str:
     return "¿A *nombre* de quién pongo la cita? 🙂"
 

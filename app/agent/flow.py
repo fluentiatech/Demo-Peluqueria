@@ -493,35 +493,45 @@ async def _collecting_datetime(
     session, business, convo, ext, intent, ctx, professionals
 ) -> str:
     # El cliente puede cambiar de profesional en cualquier momento del flujo:
-    # si nombra a otro (o «me da igual»), reajustamos y volvemos a buscar.
+    # si nombra a otro (o «me da igual»), reajustamos, lo confirmamos y re-buscamos.
     prev_day = None
     if ctx.get("offered"):
         prev_day = datetime.fromisoformat(ctx["offered"][0]["start_at"]).date()
     pro = _match_resource(professionals, ext.data.get("professional"))
+    switched = False
+    switched_name: str | None = None
     if isinstance(pro, ResourceRef) and pro.id != ctx.get("resource_id"):
         ctx = {**ctx, "resource_id": pro.id, "professional_name": pro.name,
                "any_pro": False}
         ctx.pop("offered", None)
+        switched, switched_name = True, pro.name
     elif pro == "ANY" and not ctx.get("any_pro"):
         ctx = {**ctx, "any_pro": True, "resource_id": None}
         ctx.pop("offered", None)
+        switched, switched_name = True, None
 
     # Sub-paso 1: aún no hay huecos ofertados → necesitamos día (y quizá hora).
     if not ctx.get("offered"):
         day = _resolve_date(ext) or prev_day
         want = _norm_time(ext.data.get("time"))
         if day is None:
-            return "¿Qué *día* te viene bien? _(p. ej. mañana, el viernes, 30/06)_"
-        if want:
-            return await _request_specific_time(session, business, convo, ctx, day, want)
-        slots = await _find_slots(
-            session, business.id, ctx["service_id"], day, ctx.get("resource_id")
-        )
-        if not slots:
-            return await _go_waitlist(session, business, convo, ctx, day)
-        ctx = {**ctx, "offered": _offered_from_slots(slots)}
-        _set(convo, S.COLLECTING_DATETIME, ctx)
-        return replies.offer_slots([o["label"] for o in ctx["offered"]])
+            reply = "¿Qué *día* te viene bien? _(p. ej. mañana, el viernes, 30/06)_"
+        elif want:
+            reply = await _request_specific_time(session, business, convo, ctx, day, want)
+        else:
+            slots = await _find_slots(
+                session, business.id, ctx["service_id"], day, ctx.get("resource_id")
+            )
+            if not slots:
+                reply = await _go_waitlist(session, business, convo, ctx, day)
+            else:
+                ctx = {**ctx, "offered": _offered_from_slots(slots)}
+                _set(convo, S.COLLECTING_DATETIME, ctx)
+                reply = replies.offer_slots([o["label"] for o in ctx["offered"]])
+        # Si cambió de profesional, le confirmamos el cambio antes de la respuesta.
+        if switched:
+            reply = replies.professional_switched(switched_name) + reply
+        return reply
 
     # Sub-paso 2: hay huecos ofertados → elige uno, o propone fecha/hora nuevas.
     chosen = _pick_slot(ctx["offered"], ext.data.get("choice_index"), ext.data.get("time"))
