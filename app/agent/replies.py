@@ -2,6 +2,9 @@
 
 El texto transaccional es determinista (no lo genera el LLM): más fiable y
 testeable. El LLM solo redacta las respuestas de Q&A libre.
+
+Formato WhatsApp: *negrita*, _cursiva_, saltos de línea y emojis para que los
+mensajes se vean cuidados y cercanos.
 """
 from __future__ import annotations
 
@@ -36,119 +39,145 @@ def greeting(
     wave = "👋 " if use_emojis else ""
     hola = f"¡Hola, {first}!" if first else "¡Hola!"
     intro = f" Soy {assistant_name}." if assistant_name else ""
-    return f"{wave}{hola}{intro} ¿Quieres pedir cita o tienes alguna duda?"
+    return f"{wave}{hola}{intro}\n\n¿Quieres *pedir cita* o tienes alguna *duda*?"
 
 
 def ask_service(services: list[str]) -> str:
-    catalogo = "\n".join(f"· {s}" for s in services)
-    return f"¿Para qué servicio quieres la cita?\n{catalogo}"
+    catalogo = "\n".join(f"  •  {s}" for s in services)
+    return f"💇 ¿*Para qué servicio* quieres la cita?\n\n{catalogo}"
 
 
 def service_not_found(services: list[str]) -> str:
     catalogo = ", ".join(services)
-    return f"No reconozco ese servicio. Ofrecemos: {catalogo}. ¿Cuál te interesa?"
+    return (
+        "Mmm, no reconozco ese servicio 🤔\n\n"
+        f"Ofrecemos: {catalogo}.\n¿*Cuál te interesa*?"
+    )
 
 
 def ask_professional(names: list[str]) -> str:
-    lista = "\n".join(f"· {n}" for n in names)
-    return f"¿Con qué profesional la quieres?\n{lista}\n(o dime «me da igual»)"
+    lista = "\n".join(f"  •  {n}" for n in names)
+    return f"💈 ¿Con qué *profesional* la quieres?\n\n{lista}\n\n_O dime «me da igual»._"
 
 
 def professional_not_found(names: list[str]) -> str:
-    return f"No reconozco a ese profesional. Tenemos a: {', '.join(names)}. ¿Con quién?"
+    return (
+        "No reconozco a ese profesional 🤔\n\n"
+        f"Tenemos a: {', '.join(names)}.\n¿Con quién la quieres?"
+    )
 
 
 def ask_date(service_name: str) -> str:
-    return f"Perfecto, {service_name}. ¿Qué día te viene bien?"
+    return (
+        f"¡Perfecto! *{service_name}* ✨\n\n"
+        "¿Qué *día* te viene bien? _(p. ej. mañana, el viernes, 30/06)_"
+    )
 
 
 def no_slots() -> str:
-    return "No encuentro huecos para esas fechas. ¿Quieres probar otro día?"
+    return "No encuentro huecos para esas fechas 😕\n\n¿Quieres *probar otro día*?"
 
 
 def ask_waitlist(service_name: str) -> str:
     return (
-        f"Ahora mismo no me quedan huecos de {service_name}. "
-        "¿Quieres que te avise en cuanto se libere uno? (sí / no)"
+        f"Ahora mismo no me quedan huecos de *{service_name}* 😕\n\n"
+        "¿Quieres que te *avise* en cuanto se libere uno? _(sí / no)_"
     )
 
 
 def waitlist_added(service_name: str) -> str:
     return (
-        f"¡Hecho! Te aviso en cuanto se libere un hueco de {service_name}. "
-        "En cuanto pase, te escribo y con un «sí» te lo reservo."
+        f"¡Hecho! 🙌 Te *aviso* en cuanto se libere un hueco de *{service_name}*.\n\n"
+        "_En cuanto pase, te escribo y con un «sí» te lo reservo._"
     )
 
 
 def offer_slots(slots: list[str]) -> str:
-    opciones = "\n".join(f"{i}. {s}" for i, s in enumerate(slots, 1))
-    return f"Estos son los huecos disponibles:\n{opciones}\n¿Cuál prefieres?"
+    opciones = "\n".join(f"  *{i}.*  {s}" for i, s in enumerate(slots, 1))
+    return (
+        f"🗓️ Estos son los *huecos disponibles*:\n\n{opciones}\n\n"
+        "¿*Cuál prefieres*? _(dime el número o la hora)_"
+    )
 
 
 def ask_choice_again() -> str:
-    return "No me ha quedado claro. Dime el número de la opción o la hora que prefieres."
+    return (
+        "No me ha quedado claro 🤔\n\n"
+        "Dime el *número* de la opción o la *hora* que prefieres."
+    )
 
 
 def ask_name() -> str:
-    return "¿A nombre de quién pongo la cita?"
+    return "¿A *nombre* de quién pongo la cita? 🙂"
 
 
 def confirm_booking(service_name: str, when: str) -> str:
-    return f"¿Confirmo entonces {service_name} el {when}? (sí / no)"
+    return (
+        f"¿Te *confirmo* *{service_name}* el *{when}*? ✅\n\n_Responde *sí* o *no*._"
+    )
 
 
 def booking_done(service_name: str, when: str, name: str | None = None) -> str:
     first = _first_name(name)
-    saludo = f"¡Listo, {first}!" if first else "¡Listo!"
-    return f"{saludo} Tu cita de {service_name} queda el {when}. ¡Te esperamos!"
+    saludo = f"*¡Listo, {first}!*" if first else "*¡Listo!*"
+    return (
+        f"✅ {saludo}\n\nTu cita de *{service_name}* queda el *{when}*.\n\n"
+        "_¡Te esperamos!_ 😊"
+    )
 
 
 def slot_taken() -> str:
-    return "Vaya, ese hueco se acaba de ocupar. Te busco otros disponibles."
+    return "Vaya 😅 ese hueco se *acaba de ocupar*.\n\nTe busco otros disponibles…"
 
 
 def confirm_cancel(service_name: str, when: str) -> str:
-    return f"¿Confirmas que cancelo tu cita de {service_name} del {when}? (sí / no)"
+    return (
+        f"¿Confirmas que *cancelo* tu cita de *{service_name}* del *{when}*? ❌\n\n"
+        "_Responde *sí* o *no*._"
+    )
 
 
 def cancel_done() -> str:
-    return "Hecho, tu cita queda cancelada. Aquí estamos cuando quieras volver."
+    return "Hecho ✅ tu cita queda *cancelada*.\n\n_Aquí estamos cuando quieras volver._ 🙌"
 
 
 def no_appointments() -> str:
-    return "No veo ninguna cita próxima a tu nombre. ¿Quieres reservar una?"
+    return "No veo ninguna *cita próxima* a tu nombre 🔎\n\n¿Quieres *reservar* una?"
 
 
 def reschedule_ask_date(service_name: str, when: str) -> str:
     return (
-        f"Tu cita actual es {service_name} el {when}. "
-        "¿Para qué nuevo día y hora la quieres?"
+        f"Tu cita actual es *{service_name}* el *{when}*.\n\n"
+        "¿Para qué *nuevo día y hora* la quieres?"
     )
 
 
 def reschedule_ask_professional(
     service_name: str, when: str, current: str | None, names: list[str]
 ) -> str:
-    ahora = f" (ahora con {current})" if current else ""
-    lista = "\n".join(f"· {n}" for n in names)
+    ahora = f" _(ahora con {current})_" if current else ""
+    lista = "\n".join(f"  •  {n}" for n in names)
     return (
-        f"Tu cita actual es {service_name} el {when}{ahora}.\n"
-        f"¿Con qué profesional la quieres ahora?\n{lista}\n"
-        "(o dime «me da igual»)"
+        f"Tu cita actual es *{service_name}* el *{when}*{ahora}.\n\n"
+        f"💈 ¿Con qué *profesional* la quieres ahora?\n\n{lista}\n\n"
+        "_O dime «me da igual»._"
     )
 
 
 def reschedule_done(service_name: str, when: str) -> str:
-    return f"Cambiada: {service_name} pasa al {when}. ¡Gracias!"
+    return f"✅ *Cambiada*: {service_name} pasa al *{when}*.\n\n_¡Gracias!_ 🙌"
 
 
 def aborted() -> str:
-    return "Vale, lo dejamos. Si necesitas algo más, aquí estoy."
+    return "Vale, lo dejamos 👍\n\n_Si necesitas algo más, aquí estoy._"
 
 
 def handoff() -> str:
-    return "Te paso con una persona del equipo, que te atenderá enseguida."
+    return "Te paso con una *persona del equipo* 🙋\n\n_Te atenderá enseguida._"
 
 
 def fallback() -> str:
-    return "Perdona, no te he entendido. ¿Quieres reservar, consultar o cancelar una cita?"
+    return (
+        "Perdona, no te he entendido 🙈\n\n"
+        "¿Quieres *reservar*, *consultar* o *cancelar* una cita?"
+    )

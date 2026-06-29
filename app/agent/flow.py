@@ -478,7 +478,7 @@ async def _collecting_datetime(session, business, convo, ext, intent, ctx) -> st
     if not ctx.get("offered"):
         day = _resolve_date(ext)
         if day is None:
-            return "¿Qué día te viene bien? (por ejemplo: mañana, el viernes, 30/06)"
+            return "¿Qué *día* te viene bien? _(p. ej. mañana, el viernes, 30/06)_"
         slots = await _find_slots(
             session, business.id, ctx["service_id"], day, ctx.get("resource_id")
         )
